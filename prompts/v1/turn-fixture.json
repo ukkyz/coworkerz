@@ -1,0 +1,27 @@
+{
+  "id": "pilot-v1",
+  "walkTalkRounds": 4,
+  "session": {
+    "ceoQuestion": "We have a $120,000 cap and six weeks to pilot faster onboarding. We do not yet have a savings baseline. What should we measure before committing the remaining funds?",
+    "autoWalkAndTalk": false
+  },
+  "cycle": [
+    { "speaker": "CTO", "listener": "CFO", "interactionMode": "walk_and_talk", "roomZone": "strategy-table", "knowledgeCategory": "architecture" },
+    { "speaker": "CFO", "listener": "COO", "interactionMode": "walk_and_talk", "roomZone": "window-lounge", "knowledgeCategory": "finance" },
+    { "speaker": "COO", "listener": "CTO", "interactionMode": "walk_and_talk", "roomZone": "tech-wall", "knowledgeCategory": "operations" },
+    { "speaker": "COO", "listener": "CEO", "interactionMode": "executive_consensus", "roomZone": "ceo-briefing", "knowledgeCategory": "cross-functional" }
+  ],
+  "followUp": {
+    "targetRole": "CFO",
+    "content": "Give me one release gate for the second tranche. Distinguish a proposed threshold from measured savings."
+  },
+  "nextAfterFollowUp": { "speaker": "CFO", "listener": "CEO", "interactionMode": "ceo_response", "roomZone": "ceo-briefing", "knowledgeCategory": "finance" },
+  "exampleRawFollowUp": {
+    "dialogue": "CEO, for the six-week pilot capped at $120,000, I would hold the second tranche until we compare onboarding hours per account against a pre-pilot baseline. A ten percent reduction is my proposed release threshold, not measured savings; we have no baseline yet.",
+    "knowledgeTopic": "Evidence Gate For Pilot Funding",
+    "knowledgeInsight": "Measure onboarding hours per account before the pilot and again before releasing the second tranche. Treat the proposed threshold as a decision rule rather than a forecast.",
+    "knowledgeCategory": "finance",
+    "confidenceScore": 92,
+    "tags": ["pilot", "capital-gate", "baseline"]
+  }
+}

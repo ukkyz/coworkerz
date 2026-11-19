@@ -1,0 +1,3 @@
+**Scene / technical art.** Start at `src/components/VirtualOfficeCanvas.tsx` (room creation, `buildExecutiveAvatar`, `animate`, effect cleanup) and `src/lib/executives.ts` (`ROOM_ZONES`). Apply the target-tier row in `docs/art-budgets.md` before authoring. This is procedural Three.js, not Unity, Unreal or an imported rig.
+
+Keep role picking, speaker/listener cues, camera presets and projected nameplates intact. Do not change the turn planner to fix a visual. Compare the same camera and choreography before/after: report device, buffer size/DPR, p95 frame ms and peak calls/triangles. For new assets include LODs and texture cost; for blended FX include peak coverage/layers and live particle count.

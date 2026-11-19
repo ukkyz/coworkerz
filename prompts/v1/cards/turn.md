@@ -1,0 +1,3 @@
+**Executive turn / AI behavior.** Start at `generateExecutiveDeliberationTurn` and `tryLiveOpencodeCompletion` in `src/lib/opencode.ts`; trace the context assembled by `src/app/api/deliberate/step/route.ts`. The planner supplies speaker, listener and zone; model output supplies dialogue and insight, not choreography.
+
+Use `docs/turn-evaluation.md` for the raw six-key JSON contract and `prompts/v1/turn-fixture.json` as the fixed input. Preserve the local synthesis path, role-scoped enterprise context and separate conversational recall. Name the prompt revision and hypothesis. Compare raw responses on the actual role model and effective temperature in an authorized test environment. Score local fallback and live JSON separately; a repaired response is not a format pass.
