@@ -18,7 +18,7 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "Aether 3D Executive Suite | CEO Virtual Boardroom (CTO · CFO · COO)",
   description:
-    "Enterprise 3D virtual office room where you act as CEO while OpenCode-configured CTO, CFO, and COO virtual assistants walk, talk, enrich institutional knowledge, and save conversations in PostgreSQL.",
+    "Enterprise 3D virtual office room where you act as CEO while OpenCode-configured CTO, CFO, and COO virtual assistants walk, talk, enrich institutional knowledge, and save conversations in SQLite.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

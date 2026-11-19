@@ -5,10 +5,7 @@ import {
   deliberationSessions,
   knowledgeEntries,
 } from "@/db/schema";
-import {
-  ensureBoardroomInitialized,
-  getActiveOpencodeConfig,
-} from "@/lib/bootstrap";
+import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import {
   deriveDeliberationContext,
   generateExecutiveDeliberationTurn,
@@ -30,7 +27,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
     const body = (await req.json()) as { sessionId?: number };
     const sessionId = Number(body.sessionId);
     if (!sessionId) {

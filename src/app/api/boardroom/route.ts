@@ -8,11 +8,7 @@ import {
   ekRelationships,
   knowledgeEntries,
 } from "@/db/schema";
-import { ensureEnterpriseKnowledgeInitialized } from "@/lib/enterprise-knowledge";
-import {
-  ensureBoardroomInitialized,
-  getActiveOpencodeConfig,
-} from "@/lib/bootstrap";
+import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import { asc, desc, eq } from "drizzle-orm";
 import {
   deriveDeliberationContext,
@@ -30,8 +26,6 @@ function maskKey(key: string): string {
 
 export async function GET(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
-
     const requestedSessionId = req.nextUrl.searchParams.get("sessionId");
     const sessions = await db
       .select()
@@ -72,7 +66,6 @@ export async function GET(req: NextRequest) {
         )
       : null;
 
-    await ensureEnterpriseKnowledgeInitialized();
     const [ekDocs, ekEnts, ekRels] = await Promise.all([
       db
         .select({ id: ekDocuments.id, reviewStatus: ekDocuments.reviewStatus })
@@ -128,7 +121,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("Failed to fetch boardroom state:", error);
     return NextResponse.json(
-      { error: "Failed to load boardroom state from PostgreSQL" },
+      { error: "Failed to load boardroom state from SQLite" },
       { status: 500 }
     );
   }

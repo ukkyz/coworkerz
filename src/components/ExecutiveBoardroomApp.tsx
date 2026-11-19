@@ -204,7 +204,7 @@ export default function ExecutiveBoardroomApp() {
             roomZone: (lastBot.roomZone as RoomZoneId) || "ceo-briefing",
             interactionMode: "idle",
             speechText: null,
-            stageLabel: "Ready · Last Synthesis Saved in PostgreSQL",
+            stageLabel: "Ready · Last Synthesis Saved in SQLite",
             isEnriching: false,
             latestInsightTopic: null,
           });
@@ -763,7 +763,7 @@ export default function ExecutiveBoardroomApp() {
             <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-slate-100">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
               <p className="text-sm font-semibold text-slate-700">
-                Initializing 3D Virtual Executive Boardroom & PostgreSQL Memory...
+                Initializing 3D Virtual Executive Boardroom & SQLite Memory...
               </p>
             </div>
           ) : (
@@ -1143,7 +1143,7 @@ export default function ExecutiveBoardroomApp() {
                       </p>
                     </div>
 
-                    {/* Chronological Messages Saved in PostgreSQL */}
+                    {/* Chronological Messages Saved in SQLite */}
                     <div className="flex-1 space-y-3 overflow-y-auto p-4">
                       {messages.map((msg) => {
                         const isCeo = msg.senderRole === "CEO";
@@ -1254,7 +1254,7 @@ export default function ExecutiveBoardroomApp() {
               </div>
             )}
 
-            {/* TAB 2: Enriched Knowledge Vault (PostgreSQL) */}
+            {/* TAB 2: Enriched Knowledge Vault (SQLite) */}
             {activeTab === "knowledge" && (
               <div className="flex flex-1 flex-col overflow-hidden">
                 <div className="space-y-2.5 border-b border-slate-200/80 bg-slate-50/70 p-3.5">
@@ -1391,7 +1391,7 @@ export default function ExecutiveBoardroomApp() {
                           type="submit"
                           className="rounded-lg bg-blue-700 px-3 py-1 text-[11px] font-semibold text-white"
                         >
-                          Save to PostgreSQL
+                          Save to SQLite
                         </button>
                       </div>
                     </form>
@@ -1507,7 +1507,7 @@ export default function ExecutiveBoardroomApp() {
               <MemoryPanel refreshKey={memoryRefreshKey} />
             )}
 
-            {/* TAB 3: Saved PostgreSQL CEO Question Archive */}
+            {/* TAB 3: Saved SQLite CEO Question Archive */}
             {activeTab === "history" && (
               <div className="flex-1 space-y-2.5 overflow-y-auto p-3.5">
                 <div className="px-1 text-[11px] font-semibold text-slate-500">

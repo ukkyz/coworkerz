@@ -2,7 +2,7 @@
 
 **Pick the recipient first.** A *coding agent* needs a change to make, a read set and an observable pass condition. A *boardroom executive* needs a CEO decision, facts, unknowns and a time horizon. Do not put development instructions into the CEO persona, journals or enterprise KB.
 
-## Coding agent · v1
+## Coding agent · v1 contract, versioned task cards
 
 If you have 30 seconds, paste this completed brief into an agent with the checkout:
 
@@ -17,7 +17,8 @@ For another task, run `node scripts/brief.mjs AREA 'objective' 'observable pass 
 | Area / card | Example objective | Example pass condition |
 | --- | --- | --- |
 | [scene](v1/cards/scene.md) | Batch the walnut slats | ≤2 slat calls in the color pass; unchanged silhouette in CEO POV and overview |
-| [boardroom](v1/cards/boardroom.md) | Show which executive is preparing a direct reply | After a CFO follow-up with auto off, one pending CFO label becomes one saved CFO reply; no duplicate after reload |
+| [boardroom](v2/cards/boardroom.md) | Show which executive is preparing a direct reply | After a CFO follow-up with auto off, one pending CFO label becomes one saved CFO reply; no duplicate after reload |
+| [storage](v2/cards/storage.md) | Migrate a session field without losing history | Existing session reloads with the intended value; a second migrate/seed run changes no rows |
 | [turn](v1/cards/turn.md) | Make CFO direct answers distinguish a proposed gate from measured savings | In all three CFO follow-up trials of `pilot-v1`, raw finance JSON gives one gate, acknowledges missing baseline and claims no measured ROI |
 | [knowledge](v1/cards/knowledge.md) | Surface the review state after promoting a session note | A promoted synthetic note shows as pending; it is absent from executive retrieval passages until approved and only visible within scope |
 
@@ -45,4 +46,5 @@ To explore the same pilot outside the scored run, choose a target in the compose
 
 | Version | Change | Validation scope |
 | --- | --- | --- |
+| v2 cards | Boardroom now targets file-backed SQLite; new storage card covers migrations, seed receipts and persistence tests. The v1 boardroom card describes the archived PostgreSQL implementation. Contract and turn fixture unchanged. | Offline assembly and SQLite integration tests |
 | v1 | Initial implementation contract and boardroom, scene, turn and knowledge cards; `pilot-v1` four-turn cycle plus addressed follow-up | Offline assembly tests; synthetic reference expectations. No production-model or device-quality claim. |

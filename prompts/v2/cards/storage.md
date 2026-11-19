@@ -1,0 +1,3 @@
+**Storage / migration · card v2.** Start in `src/db/schema.ts` (SQLite column mappings and foreign keys), `src/db/index.ts` (connection), and `drizzle.config.ts` (migration history under `drizzle/`). The app and CLI must resolve the same local file. `scripts/seed.ts` owns demo data; it must not overwrite edits or reinsert deleted records on a rerun.
+
+Name the affected tables, their knowledge plane, and the before/after API shape. Generate and inspect a migration; test it on a disposable file with a synthetic existing row, not only on an empty DB. Run `npm run test:db` and report journal, row-count, type round-trip and foreign-key evidence relevant to the change. Never include the database file, keys or transcripts in the handoff.

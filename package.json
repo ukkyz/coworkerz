@@ -1,38 +1,48 @@
 {
-  "name": "nextjs-postgresql-template",
+  "name": "coworkerz",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "test:db": "tsx --test scripts/sqlite.test.ts",
+    "test": "node --test scripts/brief.test.mjs && npm run test:db"
   },
   "dependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/three": "^0.187.0",
-    "dotenv": "17.3.1",
-    "drizzle-orm": "0.45.2",
+    "better-sqlite3": "13.2.0",
+    "drizzle-orm": "0.45.4",
     "js-yaml": "^5.5.0",
     "lucide-react": "^1.75.0",
     "mermaid": "^12.3.0",
     "next": "16.4.2",
-    "pg": "8.20.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "three": "^0.187.0"
   },
   "devDependencies": {
+    "@next/env": "16.4.2",
     "@tailwindcss/postcss": "4.1.17",
+    "@types/better-sqlite3": "9.6.0",
     "@types/node": "22.19.15",
-    "@types/pg": "8.18.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "0.31.11",
     "eslint": "9.39.4",
     "eslint-config-next": "16.4.2",
     "postcss": "8.5.23",
     "tailwindcss": "4.1.17",
+    "tsx": "4.23.15",
     "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
