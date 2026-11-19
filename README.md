@@ -1,6 +1,6 @@
 # Coworkerz · 3D Executive Suite
 
-You occupy the CEO seat. Give the CTO, CFO and COO a directive, watch them walk between stations, then address a follow-up to one executive or the whole team. The boardroom, labeled *Aether* in the UI, connects a procedural Three.js office to OpenCode-compatible chat completions and a PostgreSQL record of sessions, insights and enterprise knowledge.
+You occupy the CEO seat. Give the CTO, CFO and COO a directive, watch them walk between stations, then address a follow-up to one executive or the whole team. The boardroom, labeled *Aether* in the UI, connects a procedural Three.js office to OpenCode-compatible chat completions and a file-backed SQLite record of sessions, insights and enterprise knowledge.
 
 ## Give your next coding agent a task
 
@@ -14,23 +14,39 @@ Paste the output into an agent that has this checkout. No install, database or A
 
 ## Run the application locally
 
-1. Use Node.js 20.9+ (Node 22 recommended), npm and a running PostgreSQL service. Create a **disposable database** and give the development role permission to create tables in its schema. The first boardroom request creates/seeds tables; you do not need a migration command for a fresh DB. `drizzle.config.json` specifies a separate local CLI connection, not the runtime connection.
-2. Copy the server environment template without overwriting existing settings: `cp -n .env.example .env`. Set `DATABASE_URL` to that database **before** starting Next.js; `src/db/index.ts` requires it even at import time. The template redirects new memory mirrors away from the tracked samples.
-3. Install and start from this directory:
+1. Use **Node.js 22+** and npm. No database server, Docker container or API key is required for setup. The server uses Drizzle ORM with the native `better-sqlite3` driver. If npm invokes `node-gyp` on a network-restricted host, use matching local Node headers instead of downloading them: in this Arena environment, run `npm_config_nodedir=/usr/local npm ci` in place of `npm ci` below.
+2. From the repository root, copy the template without overwriting existing settings and initialize the local file:
 
    ```sh
-   npm install
+   cp -n .env.example .env
+   npm ci
+   npm run db:setup
    npm run dev
    ```
 
-   Open the URL Next prints (normally `http://localhost:3000`). `GET /api/health` returning `{"ok":true}` checks **database connectivity only**. Open `/` to load the seeded boardroom. There is no lockfile in the initial checkout; use `npm install`, not `npm ci` there.
+   `DATABASE_URL` defaults to `.local/coworkerz.sqlite`. If your `.env` still has a PostgreSQL URL, replace it **before setup**. Use a local path, absolute or relative to the project root (`file:./data/suite.sqlite` also works). The CLI and Next use the same env-file precedence and create missing parent directories. Set `NODE_ENV=production` for jobs that should load `.env.production`. Point `MEMORY_DIR` and `KNOWLEDGE_DIR` at throwaway directories for testing.
+3. Open the URL Next prints (normally `http://localhost:3000`). `/api/health` checks connection access only; `/api/boardroom` exercises the migrated schema and seed. Requests no longer create tables or repopulate the demo.
 4. In OpenCode settings, inspect the gateway, per-role models, temperature and rounds. Provider credentials are optional for local synthesis. **No key does not mean no network:** free model IDs can use a public bearer, and the live client can retry the Zen gateway. Use only synthetic data on a trusted local instance; block provider egress if an offline run is required. The interactive console assumes a trusted CEO; it is not a production identity boundary.
+
+## Database lifecycle
+
+| Command | When to run it |
+| --- | --- |
+| `npm run db:generate -- --name describe_change` | After editing `src/db/schema.ts`. Review and commit the generated SQL **and** `drizzle/meta/`; keep applied migrations immutable. |
+| `npm run db:migrate` | Before serving each release. Applies pending migrations to the configured file; does not insert demo data. |
+| `npm run db:seed` | After migrating a new suite. Adds OpenCode settings, a completed session, messages, notes, domains, taxonomy, documents/chunks and graph. No model calls. A transaction records the seed once; reruns preserve edits and deletions. |
+| `npm run db:setup` | Runs migrate then seed. Safe to repeat; regenerates taxonomy mirrors from the saved scheme. |
+
+**Deployment:** use a Node server with a writable, persistent **local** volume for the SQLite file and its WAL/SHM sidecars. Do not put it in `public/`, commit it, or rely on ephemeral/serverless instance storage. Run the setup job with development tooling installed. Restrict filesystem access: the DB can contain transcripts and credentials saved via the UI. Use SQLite's online backup facility (or stop writers and checkpoint before copying); copying only a live `.sqlite` file can omit recent writes.
+
+**Existing PostgreSQL installations:** these are SQLite *schema* migrations, not a live data converter. Nothing reads, modifies or imports the old DB. Keep its backup; if history is required, migrate an empty SQLite file, import in foreign-key order preserving IDs (JSON as JSON text, booleans as 0/1 and dates as epoch milliseconds), validate row counts and `PRAGMA foreign_key_check` on a copy before cutover. Do not overlay the demo seed on an imported dataset with its own configuration and taxonomy.
 
 | Check | What it exercises |
 | --- | --- |
 | `node --test scripts/brief.test.mjs` | Prompt assembly only, no app dependencies |
+| `npm run test:db` | Migrates and seeds a **temporary file**, exercises route reads/writes, memory and enterprise retrieval, then checks deletion and rerun behavior |
 | `npm run typecheck` / `npm run lint` | TypeScript / ESLint against the app |
-| `npm run build` then `npm start` | Production build then server; supply `DATABASE_URL`. The root layout uses `next/font/google`, so builds need font access or a populated cache. |
+| `npm run build` then `npm start` | Production build then server; run `db:setup` against the target file first. The root layout uses `next/font/google`, so builds need font access or a populated cache. |
 
 Baseline at `7bb9ac2`: typecheck passed; repo-wide lint reported 12 existing React hook errors in the boardroom, canvas and knowledge views. Recheck on your revision and distinguish new failures; do not disable rules to hide the baseline.
 

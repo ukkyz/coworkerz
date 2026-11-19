@@ -1,26 +1,27 @@
-import {
-  pgTable,
-  serial,
-  text,
-  integer,
-  boolean,
-  timestamp,
-  jsonb,
-} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const deliberationSessions = pgTable("deliberation_sessions", {
-  id: serial("id").primaryKey(),
-  ceoQuestion: text("ceo_question").notNull(),
-  status: text("status").notNull().default("active"), // 'active' | 'deliberating' | 'completed'
-  autoWalkAndTalk: boolean("auto_walk_and_talk").notNull().default(true),
-  turnCount: integer("turn_count").notNull().default(0),
-  executiveSummary: text("executive_summary"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+// Store UTC epoch milliseconds; Drizzle maps them to Date on reads and writes.
+const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
+
+// A seed is committed with its receipt, so reruns never resurrect deleted demo data.
+export const seedRuns = sqliteTable("seed_runs", {
+  name: text("name").primaryKey(),
 });
 
-export const conversationMessages = pgTable("conversation_messages", {
-  id: serial("id").primaryKey(),
+export const deliberationSessions = sqliteTable("deliberation_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ceoQuestion: text("ceo_question").notNull(),
+  status: text("status").notNull().default("active"), // 'active' | 'deliberating' | 'completed'
+  autoWalkAndTalk: integer("auto_walk_and_talk", { mode: "boolean" }).notNull().default(true),
+  turnCount: integer("turn_count").notNull().default(0),
+  executiveSummary: text("executive_summary"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(now).notNull(),
+});
+
+export const conversationMessages = sqliteTable("conversation_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   sessionId: integer("session_id")
     .notNull()
     .references(() => deliberationSessions.id, { onDelete: "cascade" }),
@@ -31,11 +32,11 @@ export const conversationMessages = pgTable("conversation_messages", {
   content: text("content").notNull(),
   modelUsed: text("model_used").notNull().default("opencode/deepseek-v4.1-flash-free"),
   providerMode: text("provider_mode").notNull().default("opencode-live"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const knowledgeEntries = pgTable("knowledge_entries", {
-  id: serial("id").primaryKey(),
+export const knowledgeEntries = sqliteTable("knowledge_entries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   sessionId: integer("session_id").references(() => deliberationSessions.id, {
     onDelete: "set null",
   }),
@@ -49,13 +50,13 @@ export const knowledgeEntries = pgTable("knowledge_entries", {
   insight: text("insight").notNull(),
   category: text("category").notNull().default("cross-functional"), // 'architecture' | 'finance' | 'operations' | 'cross-functional'
   confidenceScore: integer("confidence_score").notNull().default(91),
-  tags: jsonb("tags").$type<string[]>().notNull().default([]),
+  tags: text("tags", { mode: "json" }).$type<string[]>().notNull().default([]),
   appliedCount: integer("applied_count").notNull().default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const opencodeConfigs = pgTable("opencode_configs", {
-  id: serial("id").primaryKey(),
+export const opencodeConfigs = sqliteTable("opencode_configs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   baseUrl: text("base_url")
     .notNull()
     .default("https://opencode.ai/inference/openai/v1"),
@@ -71,7 +72,7 @@ export const opencodeConfigs = pgTable("opencode_configs", {
     .default("opencode/nemotron-3.5-lightning-free"),
   temperature: text("temperature").notNull().default("0.65"),
   walkTalkRounds: integer("walk_talk_rounds").notNull().default(4),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
 export interface CeoPersonaProfile {
@@ -113,21 +114,21 @@ export interface CeoPersonaProfile {
 }
 
 // Single living "main file" describing the CEO's skills & persona (mirrored to memory/CEO_PERSONA.md)
-export const ceoPersona = pgTable("ceo_persona", {
-  id: serial("id").primaryKey(),
+export const ceoPersona = sqliteTable("ceo_persona", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   displayName: text("display_name").notNull().default("CEO"),
   version: integer("version").notNull().default(0),
   markdown: text("markdown").notNull().default(""),
-  profile: jsonb("profile").$type<CeoPersonaProfile>(),
+  profile: text("profile", { mode: "json" }).$type<CeoPersonaProfile>(),
   analyzedMessageCount: integer("analyzed_message_count").notNull().default(0),
   providerMode: text("provider_mode")
     .notNull()
     .default("opencode-local-runtime"),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const personaRevisions = pgTable("persona_revisions", {
-  id: serial("id").primaryKey(),
+export const personaRevisions = sqliteTable("persona_revisions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   version: integer("version").notNull(),
   changeSummary: text("change_summary").notNull(),
   triggerEvent: text("trigger_event").notNull(), // 'initial' | 'ceo_directive' | 'ceo_followup' | 'ceo_response' | 'consensus' | 'manual_rebuild'
@@ -135,12 +136,12 @@ export const personaRevisions = pgTable("persona_revisions", {
     onDelete: "set null",
   }),
   markdown: text("markdown").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
 // Long-term per-executive memory: every message each bot said, heard or observed (survives session deletion)
-export const executiveMemories = pgTable("executive_memories", {
-  id: serial("id").primaryKey(),
+export const executiveMemories = sqliteTable("executive_memories", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   executiveRole: text("executive_role").notNull(), // 'CTO' | 'CFO' | 'COO'
   sessionId: integer("session_id").references(() => deliberationSessions.id, {
     onDelete: "set null",
@@ -153,7 +154,7 @@ export const executiveMemories = pgTable("executive_memories", {
   memoryType: text("memory_type").notNull(), // 'ceo-directive' | 'ceo-followup' | 'said' | 'heard' | 'observed' | 'learned'
   counterpartRole: text("counterpart_role"),
   content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
 // ============================================================================
@@ -206,27 +207,27 @@ export interface EnterpriseDocMetadata {
   tags?: string[];
 }
 
-export const ekDomains = pgTable("ek_domains", {
-  id: serial("id").primaryKey(),
+export const ekDomains = sqliteTable("ek_domains", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   key: text("key").notNull().unique(), // 'technology' | 'finance' | 'operations' | 'governance' | 'corporate_strategy'
   name: text("name").notNull(),
   description: text("description").notNull(),
   ownerRole: text("owner_role").notNull().default("CEO"),
   colorHex: text("color_hex").notNull().default("#2563EB"),
   defaultClearance: text("default_clearance").notNull().default("internal"),
-  aclReadRoles: jsonb("acl_read_roles")
+  aclReadRoles: text("acl_read_roles", { mode: "json" })
     .$type<string[]>()
     .notNull()
     .default(["CEO", "CTO", "CFO", "COO"]),
-  aclWriteRoles: jsonb("acl_write_roles")
+  aclWriteRoles: text("acl_write_roles", { mode: "json" })
     .$type<string[]>()
     .notNull()
     .default(["CEO"]),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const ekTaxonomySchemes = pgTable("ek_taxonomy_schemes", {
-  id: serial("id").primaryKey(),
+export const ekTaxonomySchemes = sqliteTable("ek_taxonomy_schemes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   schemeUri: text("scheme_uri")
     .notNull()
     .default("urn:aether:enterprise:taxonomy"),
@@ -237,23 +238,23 @@ export const ekTaxonomySchemes = pgTable("ek_taxonomy_schemes", {
   format: text("format").notNull().default("yaml-skos"),
   yamlContent: text("yaml_content").notNull(),
   skosTurtle: text("skos_turtle").notNull().default(""),
-  parsedConcepts: jsonb("parsed_concepts")
+  parsedConcepts: text("parsed_concepts", { mode: "json" })
     .$type<SkosConcept[]>()
     .notNull()
     .default([]),
   updatedBy: text("updated_by").notNull().default("CEO"),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const ekDocuments = pgTable("ek_documents", {
-  id: serial("id").primaryKey(),
+export const ekDocuments = sqliteTable("ek_documents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   docType: text("doc_type").notNull().default("policy"), // 'policy' | 'architecture_rfc' | 'financial_model' | 'runbook' | 'board_memo' | 'regulatory_filing'
   domainKey: text("domain_key")
     .notNull()
     .references(() => ekDomains.key, { onDelete: "restrict" }),
-  secondaryDomains: jsonb("secondary_domains")
+  secondaryDomains: text("secondary_domains", { mode: "json" })
     .$type<string[]>()
     .notNull()
     .default([]),
@@ -262,19 +263,19 @@ export const ekDocuments = pgTable("ek_documents", {
   classificationLevel: text("classification_level")
     .notNull()
     .default("internal"), // ClearanceLevel
-  aclReadRoles: jsonb("acl_read_roles")
+  aclReadRoles: text("acl_read_roles", { mode: "json" })
     .$type<string[]>()
     .notNull()
     .default(["CEO", "CTO", "CFO", "COO"]),
-  aclWriteRoles: jsonb("acl_write_roles")
+  aclWriteRoles: text("acl_write_roles", { mode: "json" })
     .$type<string[]>()
     .notNull()
     .default(["CEO"]),
-  metadata: jsonb("metadata")
+  metadata: text("metadata", { mode: "json" })
     .$type<EnterpriseDocMetadata>()
     .notNull()
     .default({}),
-  taxonomyConcepts: jsonb("taxonomy_concepts")
+  taxonomyConcepts: text("taxonomy_concepts", { mode: "json" })
     .$type<DocumentClassificationTag[]>()
     .notNull()
     .default([]),
@@ -284,14 +285,14 @@ export const ekDocuments = pgTable("ek_documents", {
   reviewStatus: text("review_status").notNull().default("pending_review"), // 'pending_review' | 'approved' | 'rejected'
   reviewedBy: text("reviewed_by"),
   reviewerNotes: text("reviewer_notes"),
-  reviewedAt: timestamp("reviewed_at"),
-  embedding: jsonb("embedding").$type<number[]>().notNull().default([]),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
+  embedding: text("embedding", { mode: "json" }).$type<number[]>().notNull().default([]),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const ekChunks = pgTable("ek_chunks", {
-  id: serial("id").primaryKey(),
+export const ekChunks = sqliteTable("ek_chunks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   documentId: integer("document_id")
     .notNull()
     .references(() => ekDocuments.id, { onDelete: "cascade" }),
@@ -300,12 +301,12 @@ export const ekChunks = pgTable("ek_chunks", {
   heading: text("heading").notNull().default("Section"),
   content: text("content").notNull(),
   tokenCount: integer("token_count").notNull().default(0),
-  embedding: jsonb("embedding").$type<number[]>().notNull().default([]),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  embedding: text("embedding", { mode: "json" }).$type<number[]>().notNull().default([]),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const ekEntities = pgTable("ek_entities", {
-  id: serial("id").primaryKey(),
+export const ekEntities = sqliteTable("ek_entities", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   canonicalKey: text("canonical_key").notNull().unique(),
   name: text("name").notNull(),
   entityType: text("entity_type").notNull().default("System"), // 'System' | 'Initiative' | 'Metric' | 'Regulation' | 'Organization' | 'Region' | 'Team' | 'FinancialInstrument' | 'Product'
@@ -314,14 +315,14 @@ export const ekEntities = pgTable("ek_entities", {
     .references(() => ekDomains.key, { onDelete: "restrict" }),
   taxonomyConceptId: text("taxonomy_concept_id"),
   description: text("description").notNull(),
-  attributes: jsonb("attributes")
+  attributes: text("attributes", { mode: "json" })
     .$type<Record<string, string>>()
     .notNull()
     .default({}),
   classificationLevel: text("classification_level")
     .notNull()
     .default("internal"),
-  aclReadRoles: jsonb("acl_read_roles")
+  aclReadRoles: text("acl_read_roles", { mode: "json" })
     .$type<string[]>()
     .notNull()
     .default(["CEO", "CTO", "CFO", "COO"]),
@@ -329,11 +330,11 @@ export const ekEntities = pgTable("ek_entities", {
     () => ekDocuments.id,
     { onDelete: "set null" }
   ),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const ekRelationships = pgTable("ek_relationships", {
-  id: serial("id").primaryKey(),
+export const ekRelationships = sqliteTable("ek_relationships", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   sourceEntityId: integer("source_entity_id")
     .notNull()
     .references(() => ekEntities.id, { onDelete: "cascade" }),
@@ -344,13 +345,13 @@ export const ekRelationships = pgTable("ek_relationships", {
   domainKey: text("domain_key")
     .notNull()
     .references(() => ekDomains.key, { onDelete: "restrict" }),
-  isCrossDomain: boolean("is_cross_domain").notNull().default(false),
+  isCrossDomain: integer("is_cross_domain", { mode: "boolean" }).notNull().default(false),
   weight: integer("weight").notNull().default(85),
   evidence: text("evidence").notNull().default(""),
   classificationLevel: text("classification_level")
     .notNull()
     .default("internal"),
-  aclReadRoles: jsonb("acl_read_roles")
+  aclReadRoles: text("acl_read_roles", { mode: "json" })
     .$type<string[]>()
     .notNull()
     .default(["CEO", "CTO", "CFO", "COO"]),
@@ -358,26 +359,26 @@ export const ekRelationships = pgTable("ek_relationships", {
     () => ekDocuments.id,
     { onDelete: "set null" }
   ),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-export const ekApiKeys = pgTable("ek_api_keys", {
-  id: serial("id").primaryKey(),
+export const ekApiKeys = sqliteTable("ek_api_keys", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   keyPrefix: text("key_prefix").notNull(),
   keyHash: text("key_hash").notNull().unique(),
   assignedRole: text("assigned_role").notNull().default("EXTERNAL_AGENT"), // PrincipalRole
-  allowedDomains: jsonb("allowed_domains")
+  allowedDomains: text("allowed_domains", { mode: "json" })
     .$type<string[]>()
     .notNull()
     .default(["*"]),
   clearanceLevel: text("clearance_level").notNull().default("internal"), // ClearanceLevel
-  canWrite: boolean("can_write").notNull().default(false),
-  canReadAgentMemory: boolean("can_read_agent_memory").notNull().default(false),
+  canWrite: integer("can_write", { mode: "boolean" }).notNull().default(false),
+  canReadAgentMemory: integer("can_read_agent_memory", { mode: "boolean" }).notNull().default(false),
   requestCount: integer("request_count").notNull().default(0),
-  lastUsedAt: timestamp("last_used_at"),
-  revoked: boolean("revoked").notNull().default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+  revoked: integer("revoked", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
 export type EkDomain = typeof ekDomains.$inferSelect;

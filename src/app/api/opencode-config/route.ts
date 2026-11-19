@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { opencodeConfigs } from "@/db/schema";
-import {
-  ensureBoardroomInitialized,
-  getActiveOpencodeConfig,
-} from "@/lib/bootstrap";
+import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import { normalizeOpencodeModelId } from "@/lib/opencode";
 import { eq } from "drizzle-orm";
 
@@ -49,7 +46,6 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
     const current = await getActiveOpencodeConfig();
     const body = (await req.json()) as {
       baseUrl?: string;
@@ -181,7 +177,7 @@ export async function POST(req: NextRequest) {
         mode: "opencode-local-runtime",
         latencyMs,
         message:
-          "Remote gateway unreachable or key not set — Embedded OpenCode Executive Runtime is active with zero-downtime synthesis & PostgreSQL persistence.",
+          "Remote gateway unreachable or key not set — Embedded OpenCode Executive Runtime is active with zero-downtime synthesis & SQLite persistence.",
       });
     }
   } catch (error) {

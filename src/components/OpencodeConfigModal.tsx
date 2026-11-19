@@ -149,7 +149,7 @@ export default function OpencodeConfigModal({
               </h2>
               <p className="text-xs text-slate-500">
                 Configure OpenCode Console / Zen gateway & per-executive LLM
-                models persisted in PostgreSQL
+                models persisted in SQLite
               </p>
             </div>
           </div>

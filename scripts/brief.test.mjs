@@ -8,9 +8,10 @@ import { fileURLToPath } from 'node:url';
 const root = new URL('../', import.meta.url);
 const cli = fileURLToPath(new URL('scripts/brief.mjs', root));
 const run = (...args) => spawnSync(process.execPath, [cli, ...args], { cwd: tmpdir(), encoding: 'utf8' });
-const areas = ['boardroom', 'scene', 'turn', 'knowledge'];
+const versions = { boardroom: 'v2', storage: 'v2', scene: 'v1', turn: 'v1', knowledge: 'v1' };
+const areas = Object.keys(versions);
 const cards = Object.fromEntries(areas.map(area => [
-  area, readFileSync(new URL(`prompts/v1/cards/${area}.md`, root), 'utf8').trim(),
+  area, readFileSync(new URL(`prompts/${versions[area]}/cards/${area}.md`, root), 'utf8').trim(),
 ]));
 
 for (const area of areas) {

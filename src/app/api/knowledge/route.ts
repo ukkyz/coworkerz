@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { knowledgeEntries } from "@/db/schema";
-import { ensureBoardroomInitialized } from "@/lib/bootstrap";
 import { desc, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
     const roleFilter = req.nextUrl.searchParams.get("role");
     const q = (req.nextUrl.searchParams.get("q") || "").trim().toLowerCase();
 
@@ -43,7 +41,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
     const body = (await req.json()) as {
       contributorRole?: string;
       topic?: string;
@@ -89,7 +86,6 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
     const id = Number(req.nextUrl.searchParams.get("id"));
     if (!id) {
       return NextResponse.json({ error: "Valid id required" }, { status: 400 });

@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { db } from "@/db";
 import { conversationMessages, deliberationSessions } from "@/db/schema";
-import {
-  ensureBoardroomInitialized,
-  getActiveOpencodeConfig,
-} from "@/lib/bootstrap";
+import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import { planDeliberationStep } from "@/lib/opencode";
 import { persistMemoriesFor, runMemorySync } from "@/lib/memory";
 import { eq } from "drizzle-orm";
@@ -16,7 +13,6 @@ const VALID_TARGETS = new Set(["ALL", "CTO", "CFO", "COO"]);
 /** CEO follow-up inside an existing session — addressed to the whole C-suite or one executive. */
 export async function POST(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
     const body = (await req.json()) as {
       sessionId?: number;
       content?: string;

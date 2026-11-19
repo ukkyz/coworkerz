@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureEnterpriseKnowledgeInitialized } from "@/lib/enterprise-knowledge";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +13,6 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
-  await ensureEnterpriseKnowledgeInitialized();
   const origin = req.nextUrl.origin;
 
   const openAiTools = [

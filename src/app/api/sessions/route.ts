@@ -2,10 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { persistMemoriesFor, runMemorySync } from "@/lib/memory";
 import { db } from "@/db";
 import { conversationMessages, deliberationSessions } from "@/db/schema";
-import {
-  ensureBoardroomInitialized,
-  getActiveOpencodeConfig,
-} from "@/lib/bootstrap";
+import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import { planDeliberationStep } from "@/lib/opencode";
 import { eq } from "drizzle-orm";
 
@@ -13,7 +10,6 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
     const body = (await req.json()) as {
       ceoQuestion?: string;
       autoWalkAndTalk?: boolean;
@@ -83,7 +79,6 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    await ensureBoardroomInitialized();
     const idParam = req.nextUrl.searchParams.get("id");
     const id = Number(idParam);
     if (!id) {

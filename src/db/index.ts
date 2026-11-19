@@ -1,26 +1,20 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import Database from "better-sqlite3";
+import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { databaseFile } from "./location";
 import * as schema from "./schema";
 
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is required");
+function openConnection() {
+  const connection = new Database(databaseFile(), { timeout: 5000 });
+  connection.pragma("foreign_keys = ON");
+  connection.pragma("journal_mode = WAL");
+  return connection;
 }
 
-const globalForDb = globalThis as typeof globalThis & {
-  __arenaNextJsPostgresqlPool?: Pool;
-};
+// Reuse the native connection across Next dev module reloads.
+const globalForDb = globalThis as typeof globalThis & { coworkerzSqlite?: Database.Database };
+const connection = globalForDb.coworkerzSqlite ?? openConnection();
+if (process.env.NODE_ENV !== "production") globalForDb.coworkerzSqlite = connection;
 
-export const pool =
-  globalForDb.__arenaNextJsPostgresqlPool ??
-  new Pool({
-    connectionString: databaseUrl,
-  });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__arenaNextJsPostgresqlPool = pool;
-}
-
-export const db = drizzle(pool, { schema });
+export type AppDatabase = BetterSQLite3Database<typeof schema>;
+export const db = drizzle(connection, { schema });
 export { schema };

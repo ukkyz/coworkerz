@@ -3,7 +3,7 @@ import { getMemoryFileContent } from "@/lib/memory";
 
 export const dynamic = "force-dynamic";
 
-/** Serves a memory markdown file (regenerated fresh from PostgreSQL, mirrored to memory/ on disk). */
+/** Serves a memory markdown file (regenerated fresh from SQLite, mirrored to memory/ on disk). */
 export async function GET(req: NextRequest) {
   try {
     const rel = req.nextUrl.searchParams.get("path") || "CEO_PERSONA.md";
