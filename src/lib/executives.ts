@@ -1,4 +1,8 @@
-export type ExecutiveRole = "CTO" | "CFO" | "COO";
+export const EXECUTIVE_ROLES = ["CTO", "CFO", "COO"] as const;
+export type ExecutiveRole = (typeof EXECUTIVE_ROLES)[number];
+export function isExecutiveRole(value: string): value is ExecutiveRole {
+  return EXECUTIVE_ROLES.some((role) => role === value);
+}
 export type ParticipantRole = "CEO" | ExecutiveRole;
 export type TargetRole = ParticipantRole | "ALL";
 

@@ -18,6 +18,8 @@
 | Marcus Sterling · CFO | Capital allocation, margins and payback / teal | `opencode/mimo-v2.6-flash-free` |
 | Sophia Alverez · COO | Execution, owners and SLAs / amber | `opencode/nemotron-3.5-lightning-free` |
 
+**Profile settings are separate from role identity.** On each page load, `src/app/page.tsx` reads the effective profiles from `getExecutiveProfiles` (`src/lib/executive-profile-store.ts`); missing rows use those cast defaults. The trusted CEO console can also read them at `GET /api/executive-profiles`. `PUT /api/executive-profiles/[role]` accepts only `displayName`, `job`, `skillPrompt`; saving the defaults removes the override. The client applies the saved response to its role-keyed state, including the projected HTML nameplates, outside the WebGL effect. `getTurnIdentity(plan.speaker)` reads fresh at generation time and gives the model builder **one** bot's profile and names for peer references, never another bot's skill settings. Profile saves do not edit past messages or trigger a memory rebuild.
+
 The five station IDs are `ceo-briefing`, `strategy-table`, `tech-wall`, `finance-desk`, `window-lounge`. Change `ROOM_ZONES` slots in `executives.ts`, not in a prompt. Check `TABLE_OBSTACLE` in `VirtualOfficeCanvas.tsx` when changing the table footprint. Rounds are a provider-config setting (four initially; the config route clamps updates to 2–6), not a count of stations.
 
 ## Two knowledge planes, not two interchangeable sources

@@ -11,8 +11,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
-    "test:db": "tsx --test scripts/sqlite.test.ts",
-    "test": "node --test scripts/brief.test.mjs && npm run test:db"
+    "test:db": "tsx --test scripts/sqlite.test.ts scripts/executive-profiles.test.ts",
+    "test": "node --test scripts/brief.test.mjs && npm run test:db",
+    "test:profiles:ui": "playwright test scripts/browser/customize-bots.spec.ts --workers=1"
   },
   "dependencies": {
     "@types/js-yaml": "^4.0.9",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@next/env": "16.4.2",
+    "@playwright/test": "1.65.1",
     "@tailwindcss/postcss": "4.1.17",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "22.19.15",

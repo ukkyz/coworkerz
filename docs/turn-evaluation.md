@@ -11,6 +11,11 @@
 
 `modelUsed` and `providerMode` are added by the server. In the step response the dialogue is `message.content`; the insight and category are `knowledgeEntry.insight` and `.category`. Do not ask the model for route response fields, a movement plan or its private reasoning.
 
+## Turn prompt changelog
+
+- **`executive-turn/v2`** (`src/lib/opencode.ts`): the planned speaker's effective name, job and skill guidance are JSON data in the user message, not rules in the system message. Speaker, listener, retrieval scope, category and six-key output contract are still determined by the server. A listener's display name may appear; its configured skill prompt is not supplied. Fixed local synthesis uses saved names, not arbitrary skill guidance. `npm run test:profiles:ui` inspects synthetic CFO and CTO requests at a stubbed transport after restart; it does not score a production model.
+- **v1** (before profile overrides): name, title and expertise came from the static cast. The `pilot-v1` fixture and raw response checks above still apply. For a live v2 comparison, pin the exact test profile as well as the model, temperature and grounding below.
+
 ## Why evaluate the raw reply?
 
 `src/lib/opencode.ts` sends OpenAI-compatible `POST /chat/completions`. The saved per-role model wins over its profile default; the transport strips `opencode/`. The saved temperature is parsed and clamped to 0.1–1.2 (default 0.65). The bearer is resolved from saved key → `OPENCODE_API_KEY` → `OPENAI_API_KEY`; free IDs / `big-pickle` may try public access. The client tries the configured base and can retry the Zen base. Use an approved test environment for **all** possible destinations.

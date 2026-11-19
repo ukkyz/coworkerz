@@ -22,6 +22,7 @@ import {
   Search,
   Send,
   Settings2,
+  ContactRound,
   Sparkles,
   Trash2,
   Volume2,
@@ -33,6 +34,8 @@ import {
   GitBranch,
   ArrowUpRight,
 } from "lucide-react";
+import CustomizeBotsDialog from "./CustomizeBotsDialog";
+import { DEFAULT_PROFILES, type ExecutiveProfiles } from "@/lib/executive-profiles";
 import MemoryPanel from "./MemoryPanel";
 import EnterpriseKnowledgeModal, {
   KnowledgeOsTab,
@@ -77,7 +80,10 @@ interface BoardroomStats {
 type DockTab = "transcript" | "knowledge" | "memory" | "history";
 type ComposeTarget = "NEW" | "ALL" | ExecutiveRole;
 
-export default function ExecutiveBoardroomApp() {
+export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProfiles: ExecutiveProfiles }) {
+  const [profiles, setProfiles] = useState(initialProfiles);
+  const [customizing, setCustomizing] = useState(false);
+  const customizeButton = useRef<HTMLButtonElement>(null);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [sessions, setSessions] = useState<DeliberationSession[]>([]);
   const [activeSession, setActiveSession] =
@@ -585,6 +591,8 @@ export default function ExecutiveBoardroomApp() {
   const selectedExecProfile = selectedExecutive
     ? EXECUTIVES[selectedExecutive]
     : null;
+  const defaultSkills = selectedExecutive !== null &&
+    profiles[selectedExecutive].skillPrompt === DEFAULT_PROFILES[selectedExecutive].skillPrompt;
   const selectedExecInsightsCount = selectedExecutive
     ? knowledge.filter(
         (k) =>
@@ -596,7 +604,7 @@ export default function ExecutiveBoardroomApp() {
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
       {/* Top Glassmorphic Executive Bar */}
-      <header className="z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white/88 px-4 backdrop-blur-md">
+      <header className="z-30 flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-slate-200/80 bg-white/88 px-3 py-2 backdrop-blur-md lg:flex-nowrap lg:px-4">
         {/* Brand & CEO Identity */}
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shadow-xs">
@@ -619,7 +627,7 @@ export default function ExecutiveBoardroomApp() {
 
         {/* Active CEO Directive Anchor Pill */}
         {activeSession && (
-          <div className="hidden max-w-xl flex-1 items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/90 px-3.5 py-1.5 lg:flex">
+          <div className="hidden min-w-0 max-w-xl flex-1 items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/90 px-3.5 py-1.5 xl:flex">
             <span
               className={`h-2 w-2 shrink-0 rounded-full ${
                 isLoopRunning || isGeneratingStep
@@ -637,7 +645,7 @@ export default function ExecutiveBoardroomApp() {
         )}
 
         {/* Right Controls: Auto Walk-and-Talk, Audio, DB Telemetry, OpenCode Config */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {/* Auto Walk & Talk Switch */}
           <button
             type="button"
@@ -728,6 +736,11 @@ export default function ExecutiveBoardroomApp() {
             <span>{stats.totalKnowledgeEntries} Notes</span>
           </button>
 
+          <button type="button" ref={customizeButton} onClick={() => setCustomizing(true)} aria-haspopup="dialog"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100">
+            <ContactRound className="h-3.5 w-3.5" /> Customize bots
+          </button>
+
           {/* OpenCode AI Model API Config Button */}
           <button
             type="button"
@@ -768,6 +781,7 @@ export default function ExecutiveBoardroomApp() {
             </div>
           ) : (
             <VirtualOfficeCanvas
+              profiles={profiles}
               choreography={choreography}
               cameraPreset={cameraPreset}
               selectedExecutive={selectedExecutive}
@@ -834,12 +848,12 @@ export default function ExecutiveBoardroomApp() {
                       >
                         {selectedExecProfile.role}
                       </span>
-                      <h3 className="text-xs font-bold text-slate-900">
-                        {selectedExecProfile.name}
+                      <h3 className="text-xs font-bold wrap-anywhere text-slate-900">
+                        {profiles[selectedExecProfile.role].displayName}
                       </h3>
                     </div>
-                    <p className="mt-0.5 text-[11px] font-medium text-slate-500">
-                      {selectedExecProfile.title}
+                    <p className="mt-0.5 text-[11px] font-medium wrap-anywhere text-slate-600">
+                      {profiles[selectedExecProfile.role].job}
                     </p>
                   </div>
                   <button
@@ -853,19 +867,18 @@ export default function ExecutiveBoardroomApp() {
                     Reset View
                   </button>
                 </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-slate-600">
-                  {selectedExecProfile.shortBio}
+                <p className="mt-2 line-clamp-4 text-[11px] leading-relaxed whitespace-pre-line wrap-anywhere text-slate-600">
+                  {defaultSkills ? selectedExecProfile.shortBio : profiles[selectedExecProfile.role].skillPrompt}
                 </p>
-                <div className="mt-2.5 flex flex-wrap gap-1">
-                  {selectedExecProfile.specialties.map((sp) => (
-                    <span
-                      key={sp}
-                      className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
-                    >
-                      {sp}
-                    </span>
-                  ))}
-                </div>
+                {defaultSkills && (
+                  <div className="mt-2.5 flex flex-wrap gap-1">
+                    {selectedExecProfile.specialties.map((sp) => (
+                      <span key={sp} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                        {sp}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-500">
                   <span className="font-mono truncate max-w-[155px]">
                     {selectedExecutive === "CTO"
@@ -1031,7 +1044,7 @@ export default function ExecutiveBoardroomApp() {
                     ? "Act as CEO: ask a strategic question for CTO, CFO & COO to walk, talk & enrich knowledge..."
                     : composeTarget === "ALL"
                     ? "Follow up with the whole C-suite on the active question..."
-                    : `Ask ${EXECUTIVES[composeTarget].name} (${composeTarget}) directly — they will remember it...`
+                    : `Ask ${profiles[composeTarget].displayName} (${composeTarget}) directly — they will remember it...`
                 }
                 className="flex-1 bg-transparent px-2 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
               />
@@ -1178,11 +1191,11 @@ export default function ExecutiveBoardroomApp() {
                                   {msg.senderRole} → {msg.targetRole}
                                 </span>
                                 <span
-                                  className={`text-xs font-semibold ${
+                                  className={`text-xs font-semibold wrap-anywhere ${
                                     isCeo ? "text-slate-100" : "text-slate-800"
                                   }`}
                                 >
-                                  {isCeo ? "You (CEO)" : exec?.name}
+                                  {isCeo ? "You (CEO)" : exec && profiles[exec.role].displayName}
                                 </span>
                               </div>
                               <span
@@ -1504,7 +1517,7 @@ export default function ExecutiveBoardroomApp() {
 
             {/* TAB 4: CEO Persona & Long-Term Executive Memory */}
             {activeTab === "memory" && (
-              <MemoryPanel refreshKey={memoryRefreshKey} />
+              <MemoryPanel profiles={profiles} refreshKey={memoryRefreshKey} />
             )}
 
             {/* TAB 3: Saved SQLite CEO Question Archive */}
@@ -1596,8 +1609,15 @@ export default function ExecutiveBoardroomApp() {
         onStatsChanged={() => loadBoardroom(activeSession?.id)}
       />
 
+      {customizing && <CustomizeBotsDialog
+        profiles={profiles} initialRole={selectedExecutive || "CTO"}
+        onSaved={(role, profile) => setProfiles((current) => ({ ...current, [role]: profile }))}
+        onClose={() => { setCustomizing(false); customizeButton.current?.focus(); }}
+      />}
+
       {/* OpenCode AI Model API Configuration Modal */}
       <OpencodeConfigModal
+        profiles={profiles}
         open={configModalOpen}
         config={config}
         onClose={() => setConfigModalOpen(false)}
