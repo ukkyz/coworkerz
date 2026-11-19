@@ -1,0 +1,3 @@
+**Boardroom / UI and persistence.** Start at `executeSingleWalkTalkStep` in `src/components/ExecutiveBoardroomApp.tsx` and the affected handler: `src/app/api/sessions/route.ts` (new directive), `src/app/api/ceo-message/route.ts` (follow-up), or `src/app/api/deliberate/step/route.ts` (one executive turn). The client previews a plan; PostgreSQL holds the saved turn. Do not infer the speaker from a UI timer.
+
+With a disposable DB, exercise the affected action with auto mode off, then reload the session. Check sender/target, number of saved messages and whether another step was scheduled. Cover a rejected input or failed request without reporting a successful save. For persistence changes align `src/db/schema.ts` with the initialization SQL and account for existing rows.
