@@ -14,7 +14,8 @@ import {
   type ConversationMessage,
   type KnowledgeEntry,
 } from "@/db/schema";
-import { EXECUTIVES, ExecutiveRole, ROOM_ZONES, RoomZoneId } from "./executives";
+import { isExecutiveRole, ExecutiveRole, ROOM_ZONES, RoomZoneId } from "./executives";
+import { getExecutiveProfiles } from "./executive-profile-store";
 import { getActiveOpencodeConfig } from "./opencode-config";
 import { parseStructuredJson, tryLiveOpencodeCompletion } from "./opencode";
 
@@ -27,8 +28,8 @@ type SessionRef = { id: number; ceoQuestion: string } | null;
 function tag(role: string | null | undefined): string {
   if (!role || role === "ALL") return "the whole C-suite";
   if (role === "CEO") return "the CEO";
-  const e = EXECUTIVES[role as ExecutiveRole];
-  return e ? `${e.name.replace(/^Dr\.\s+/, "").split(" ")[0]} (${role})` : role;
+  // A durable memory should still identify the right participant after a rename.
+  return isExecutiveRole(role) ? `the ${role}` : role;
 }
 const zoneLabel = (z: string) => ROOM_ZONES[z as RoomZoneId]?.label || z;
 function clip(t: string, n: number): string {
@@ -405,11 +406,12 @@ async function refineWithOpencode(
 }
 
 function renderPersonaMarkdown(p: CeoPersonaProfile, version: number, at: Date): string {
+  const profiles = getExecutiveProfiles();
   const bar = (s: number) => `${"█".repeat(Math.round(s / 10))}${"░".repeat(10 - Math.round(s / 10))}`;
   const lines: string[] = [
     "# CEO Persona & Skills Profile",
     "",
-    `> Living memory file maintained automatically by your AI C-suite — ${EXECUTIVES.CTO.name} (CTO), ${EXECUTIVES.CFO.name} (CFO) and ${EXECUTIVES.COO.name} (COO).`,
+    `> Living memory file maintained automatically by your AI C-suite — ${profiles.CTO.displayName} (CTO), ${profiles.CFO.displayName} (CFO) and ${profiles.COO.displayName} (COO).`,
     `> Version **v${version}** · Updated ${fmt(at)} · Analyzed ${p.stats.totalCeoMessages} CEO message(s) across ${p.stats.totalSessions} session(s)${p.aiRefined ? " · AI-refined via OpenCode" : ""}.`,
     "",
     "## Executive Summary",
@@ -449,7 +451,7 @@ function renderPersonaMarkdown(p: CeoPersonaProfile, version: number, at: Date):
     "",
   ];
   for (const r of ROLES) {
-    lines.push(`### ${EXECUTIVES[r].name} — ${r}`, "", ...p.executiveObservations[r].map((o) => `- ${o}`), "");
+    lines.push(`### ${profiles[r].displayName} — ${r}`, "", ...p.executiveObservations[r].map((o) => `- ${o}`), "");
   }
   lines.push(
     "## Recent CEO Directives",
@@ -577,7 +579,8 @@ export async function syncSessionTranscript(sessionId: number): Promise<string |
   }
   const msgs = await db.select().from(conversationMessages).where(eq(conversationMessages.sessionId, sessionId)).orderBy(asc(conversationMessages.id));
   const know = await db.select().from(knowledgeEntries).where(eq(knowledgeEntries.sessionId, sessionId)).orderBy(asc(knowledgeEntries.id));
-  const who = (r: string) => (r === "CEO" ? "CEO (You)" : EXECUTIVES[r as ExecutiveRole] ? `${EXECUTIVES[r as ExecutiveRole].name} (${r})` : r);
+  const profiles = getExecutiveProfiles();
+  const who = (r: string) => (r === "CEO" ? "CEO (You)" : isExecutiveRole(r) ? `${profiles[r].displayName} (${r})` : r);
   const md = [
     `# Session #${session.id} — Boardroom Conversation Transcript`,
     "",
@@ -606,7 +609,7 @@ export async function syncSessionTranscript(sessionId: number): Promise<string |
 }
 
 export async function syncExecutiveJournal(role: ExecutiveRole): Promise<string> {
-  const e = EXECUTIVES[role];
+  const profile = getExecutiveProfiles()[role];
   const mems = await db.select().from(executiveMemories).where(eq(executiveMemories.executiveRole, role)).orderBy(desc(executiveMemories.id)).limit(400);
   const [{ total }] = await db.select({ total: count() }).from(executiveMemories).where(eq(executiveMemories.executiveRole, role));
   const [persona] = await db.select().from(ceoPersona).orderBy(asc(ceoPersona.id)).limit(1);
@@ -616,9 +619,9 @@ export async function syncExecutiveJournal(role: ExecutiveRole): Promise<string>
     groups.set(key, [...(groups.get(key) || []), m]);
   }
   const md = [
-    `# ${e.name} — ${role} Long-Term Memory Journal`,
+    `# ${profile.displayName} — ${role} Long-Term Memory Journal`,
     "",
-    `_${e.title} · ${total} memories stored · Updated ${fmt(new Date())}_`,
+    `_${profile.job} · ${total} memories stored · Updated ${fmt(new Date())}_`,
     "",
     "## What I Know About the CEO",
     "",
@@ -638,6 +641,7 @@ export async function syncExecutiveJournal(role: ExecutiveRole): Promise<string>
 }
 
 export async function syncIndexFile(): Promise<string> {
+  const profiles = getExecutiveProfiles();
   const sessions = await db.select().from(deliberationSessions).orderBy(desc(deliberationSessions.id));
   const [persona] = await db.select().from(ceoPersona).orderBy(asc(ceoPersona.id)).limit(1);
   const counts = await db
@@ -654,7 +658,7 @@ export async function syncIndexFile(): Promise<string> {
     "",
     "## Executive Memory Journals",
     "",
-    ...ROLES.map((r) => `- [executives/${r}.md](executives/${r}.md) — ${EXECUTIVES[r].name} · ${countOf(r)} memories`),
+    ...ROLES.map((r) => `- [executives/${r}.md](executives/${r}.md) — ${profiles[r].displayName} · ${countOf(r)} memories`),
     "",
     "## Conversation Transcripts",
     "",

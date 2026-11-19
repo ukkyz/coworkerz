@@ -5,6 +5,7 @@ import {
   deliberationSessions,
   knowledgeEntries,
 } from "@/db/schema";
+import { getTurnIdentity } from "@/lib/executive-profile-store";
 import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import {
   deriveDeliberationContext,
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const generated = await generateExecutiveDeliberationTurn({
+      ...getTurnIdentity(plan.speaker),
       ceoQuestion: session.ceoQuestion,
       plan,
       priorMessages,

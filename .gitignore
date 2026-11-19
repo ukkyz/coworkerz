@@ -14,3 +14,6 @@ next-env.d.ts
 *-shm
 *-journal
 memory/conversations/
+
+# Playwright browser regression output
+/test-results/

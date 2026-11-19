@@ -28,6 +28,14 @@ Paste the output into an agent that has this checkout. No install, database or A
 3. Open the URL Next prints (normally `http://localhost:3000`). `/api/health` checks connection access only; `/api/boardroom` exercises the migrated schema and seed. Requests no longer create tables or repopulate the demo.
 4. In OpenCode settings, inspect the gateway, per-role models, temperature and rounds. Provider credentials are optional for local synthesis. **No key does not mean no network:** free model IDs can use a public bearer, and the live client can retry the Zen gateway. Use only synthetic data on a trusted local instance; block provider egress if an offline run is required. The interactive console assumes a trusted CEO; it is not a production identity boundary.
 
+## Customize an executive
+
+In the boardroom header, open **Customize bots**, choose **CTO**, **CFO** or **COO**, then edit **Display name**, **Job**, and **AI skill prompt**. For example, give the CFO the job *Pilot Funding Adviser* and ask it to identify a budget cap before recommending a release gate. **Save** updates that bot's nameplate and labels immediately. **Cancel** discards unsaved edits; **Restore defaults** is a draft change until saved.
+
+The saved guidance applies to that speaker's next model request. Local fallback uses the updated names but is a fixed template, not a model that interprets skill prompts. Model settings, conversation history, memory ownership and enterprise permissions stay with the permanent role, even if two bots share a name.
+
+For an existing SQLite suite, run **`npm run db:migrate`** before starting this release. The migration adds one override table; roles without a row use the built-in profiles. No reseed is necessary.
+
 ## Database lifecycle
 
 | Command | When to run it |
@@ -44,7 +52,8 @@ Paste the output into an agent that has this checkout. No install, database or A
 | Check | What it exercises |
 | --- | --- |
 | `node --test scripts/brief.test.mjs` | Prompt assembly only, no app dependencies |
-| `npm run test:db` | Migrates and seeds a **temporary file**, exercises route reads/writes, memory and enterprise retrieval, then checks deletion and rerun behavior |
+| `npm run test:db` | Exercises fresh and populated temporary SQLite files: migrations, isolated profile writes/validation, fallback names, memory and enterprise retrieval |
+| `npm run test:profiles:ui` | After `npm run build` and `npx playwright install chromium`, runs the keyboard/mobile profile workflow in Chromium, restarts the Next server, and inspects mocked CFO/CTO requests. Creates its own temporary SQLite file; no provider key or running server needed. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an existing Chromium executable. |
 | `npm run typecheck` / `npm run lint` | TypeScript / ESLint against the app |
 | `npm run build` then `npm start` | Production build then server; run `db:setup` against the target file first. The root layout uses `next/font/google`, so builds need font access or a populated cache. |
 

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import type { ExecutiveRole } from "../lib/executives";
 
 // Store UTC epoch milliseconds; Drizzle maps them to Date on reads and writes.
 const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
@@ -54,6 +55,14 @@ export const knowledgeEntries = sqliteTable("knowledge_entries", {
   appliedCount: integer("applied_count").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
+
+// Only overrides live here. The role (never a display name) identifies the slot.
+export const executiveProfileOverrides = sqliteTable("executive_profile_overrides", {
+  role: text("role").$type<ExecutiveRole>().primaryKey().notNull(),
+  displayName: text("display_name").notNull(),
+  job: text("job").notNull(),
+  skillPrompt: text("skill_prompt").notNull(),
+}, (table) => [check("executive_profile_role", sql`${table.role} IN ('CTO', 'CFO', 'COO')`)]);
 
 export const opencodeConfigs = sqliteTable("opencode_configs", {
   id: integer("id").primaryKey({ autoIncrement: true }),

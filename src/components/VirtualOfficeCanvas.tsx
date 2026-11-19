@@ -13,6 +13,8 @@ import {
   TargetRole,
 } from "@/lib/executives";
 
+import type { ExecutiveProfiles } from "@/lib/executive-profiles";
+
 export type CameraPreset =
   | "ceo-pov"
   | "boardroom-overview"
@@ -37,6 +39,7 @@ export interface ActiveChoreography {
 }
 
 interface VirtualOfficeCanvasProps {
+  profiles: ExecutiveProfiles;
   choreography: ActiveChoreography;
   cameraPreset: CameraPreset;
   selectedExecutive: ExecutiveRole | null;
@@ -616,6 +619,7 @@ function buildExecutiveAvatar(
 }
 
 export default function VirtualOfficeCanvas({
+  profiles,
   choreography,
   cameraPreset,
   selectedExecutive,
@@ -623,7 +627,7 @@ export default function VirtualOfficeCanvas({
   modelsByRole,
 }: VirtualOfficeCanvasProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const badgeRefs = useRef<Record<ExecutiveRole, HTMLDivElement | null>>({
+  const badgeRefs = useRef<Record<ExecutiveRole, HTMLButtonElement | null>>({
     CTO: null,
     CFO: null,
     COO: null,
@@ -1520,7 +1524,7 @@ export default function VirtualOfficeCanvas({
           .slice(0, 22);
 
         return (
-          <div
+          <button type="button" aria-label={`View ${profiles[role].displayName}, ${profiles[role].job} (${role})`}
             key={role}
             ref={(el) => {
               badgeRefs.current[role] = el;
@@ -1535,7 +1539,7 @@ export default function VirtualOfficeCanvas({
                 : "bg-white/82 shadow-sm hover:bg-white/95"
             }`}
           >
-            <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
               <span
                 className="inline-block h-2 w-2 rounded-full"
                 style={{ backgroundColor: profile.accentHex }}
@@ -1546,11 +1550,12 @@ export default function VirtualOfficeCanvas({
               >
                 {role}
               </span>
-              <span className="text-xs font-semibold text-slate-900">
-                {profile.name}
+              <span className="max-w-36 truncate text-xs font-semibold text-slate-900">
+                {profiles[role].displayName}
               </span>
-            </div>
-            <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-500">
+            </span>
+            <span className="block max-w-48 truncate text-left text-[10px] text-slate-600">{profiles[role].job}</span>
+            <span className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-500">
               <span
                 ref={(el) => {
                   statusTextRefs.current[role] = el;
@@ -1562,8 +1567,8 @@ export default function VirtualOfficeCanvas({
               <span className="rounded bg-slate-100 px-1 py-0.2 font-mono text-[9px] text-slate-500">
                 {shortModel}
               </span>
-            </div>
-          </div>
+            </span>
+          </button>
         );
       })}
 
@@ -1589,8 +1594,8 @@ export default function VirtualOfficeCanvas({
                 >
                   {activeSpeakerProfile.role} → {choreography.listener || "ALL"}
                 </span>
-                <span className="text-xs font-semibold text-slate-800">
-                  {activeSpeakerProfile.name}
+                <span className="max-w-32 truncate text-xs font-semibold text-slate-800">
+                  {profiles[activeSpeakerProfile.role].displayName}
                 </span>
               </div>
               <span className="text-[10px] font-medium text-slate-400">

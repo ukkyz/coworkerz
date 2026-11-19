@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { EXECUTIVES, ExecutiveRole } from "@/lib/executives";
+import type { ExecutiveProfiles } from "@/lib/executive-profiles";
 import type { CeoPersonaProfile } from "@/db/schema";
 
 interface MemoryPayload {
@@ -55,7 +56,7 @@ function timeAgo(iso: string): string {
   return `${Math.round(s / 86400)}d ago`;
 }
 
-export default function MemoryPanel({ refreshKey }: { refreshKey: number }) {
+export default function MemoryPanel({ refreshKey, profiles }: { refreshKey: number; profiles: ExecutiveProfiles }) {
   const [data, setData] = useState<MemoryPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [rebuilding, setRebuilding] = useState(false);
@@ -244,7 +245,7 @@ export default function MemoryPanel({ refreshKey }: { refreshKey: number }) {
                   <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: EXECUTIVES[r].accentHex }}>
                     {r}
                   </span>
-                  <span className="text-[11px] font-semibold text-slate-800">{EXECUTIVES[r].name}</span>
+                  <span className="text-[11px] font-semibold wrap-anywhere text-slate-800">{profiles[r].displayName}</span>
                 </div>
                 <button
                   type="button"

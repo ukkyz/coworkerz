@@ -19,6 +19,8 @@ import {
   OPENCODE_MODELS,
 } from "@/lib/executives";
 
+import type { ExecutiveProfiles } from "@/lib/executive-profiles";
+
 export interface ClientOpencodeConfig {
   id: number;
   baseUrl: string;
@@ -33,6 +35,7 @@ export interface ClientOpencodeConfig {
 }
 
 interface OpencodeConfigModalProps {
+  profiles: ExecutiveProfiles;
   open: boolean;
   config: ClientOpencodeConfig;
   onClose: () => void;
@@ -40,6 +43,7 @@ interface OpencodeConfigModalProps {
 }
 
 export default function OpencodeConfigModal({
+  profiles,
   open,
   config,
   onClose,
@@ -266,11 +270,11 @@ export default function OpencodeConfigModal({
                       >
                         {role}
                       </span>
-                      <span className="text-xs font-semibold text-slate-900">
-                        {exec.name}
+                      <span className="text-xs font-semibold wrap-anywhere text-slate-900">
+                        {profiles[role].displayName}
                       </span>
-                      <span className="text-[11px] text-slate-400">
-                        · {exec.title}
+                      <span className="text-[11px] wrap-anywhere text-slate-600">
+                        · {profiles[role].job}
                       </span>
                     </div>
                   </div>
