@@ -3,6 +3,7 @@ import { check, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
 import type { ExecutiveRole } from "../lib/executives";
 
 import type { ExecutiveId, PermissionPreset } from "../lib/roster";
+import type { TopicReadings } from "../lib/ceo-topics";
 
 // Store UTC epoch milliseconds; Drizzle maps them to Date on reads and writes.
 const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
@@ -152,6 +153,17 @@ export const ceoPersona = sqliteTable("ceo_persona", {
     .default("opencode-local-runtime"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
+
+// One explicitly captured baseline for the human in this single-CEO installation.
+// No transcript excerpts or foreign keys to the regenerable living persona.
+export const ceoSignalBaseline = sqliteTable("ceo_signal_baseline", {
+  id: integer("id").primaryKey(),
+  revision: integer("revision").notNull(),
+  capturedAt: integer("captured_at", { mode: "timestamp_ms" }).notNull(),
+  personaVersion: integer("persona_version"),
+  ceoMessages: integer("ceo_messages").notNull(),
+  readings: text("readings", { mode: "json" }).$type<TopicReadings>().notNull(),
+}, t => [check("single_ceo_baseline", sql`${t.id} = 1`)]);
 
 export const personaRevisions = sqliteTable("persona_revisions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
