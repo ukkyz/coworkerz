@@ -29,6 +29,13 @@
       "when": 1795146177397,
       "tag": "0003_ceo_signal_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795166321259,
+      "tag": "0004_gateway_request_state",
+      "breakpoints": true
     }
   ]
 }

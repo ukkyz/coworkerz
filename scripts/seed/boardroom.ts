@@ -1,9 +1,10 @@
+import { gatewayBase, CONSOLE_BASE } from "@/lib/gateway-endpoints";
 import type { AppDatabase } from "@/db";
 import { conversationMessages, deliberationSessions, knowledgeEntries, opencodeConfigs } from "@/db/schema";
 
 export function seedBoardroom(tx: AppDatabase) {
   // Env keys are resolved by the completion client, not copied into the demo file.
-  tx.insert(opencodeConfigs).values({ baseUrl: process.env.OPENCODE_BASE_URL || undefined }).run();
+  tx.insert(opencodeConfigs).values({ baseUrl: gatewayBase(process.env.OPENCODE_BASE_URL?.trim() || CONSOLE_BASE) }).run();
   const initialQuestion =
     "Should we allocate $4.8M this quarter to build dedicated sovereign AI inference clusters or scale via multi-cloud GPU commitments while expanding enterprise sales in Europe?";
 

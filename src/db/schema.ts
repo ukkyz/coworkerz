@@ -102,6 +102,14 @@ export const opencodeConfigs = sqliteTable("opencode_configs", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
+// One row per canonical gateway that needs durable routing IDs or request numbers.
+// No credentials, header rules, prompt text, or per-request logs go here.
+export const gatewayRequestState = sqliteTable("gateway_request_state", {
+  baseUrl: text("base_url").primaryKey(),
+  namespace: text("namespace").notNull(),
+  lastSequence: integer("last_sequence").notNull().default(0),
+}, t => [check("gateway_sequence_range", sql`${t.lastSequence} BETWEEN 0 AND 9007199254740991`)]);
+
 export interface CeoPersonaProfile {
   executiveSummary: string;
   skills: Array<{

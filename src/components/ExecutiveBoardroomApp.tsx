@@ -34,6 +34,7 @@ import {
   GitBranch,
   ArrowUpRight,
 } from "lucide-react";
+import { CONSOLE_BASE, normalizeOpencodeModelId } from "@/lib/gateway-endpoints";
 import CustomizeBotsDialog from "./CustomizeBotsDialog";
 import dynamic from 'next/dynamic';
 import { isActive, isExecutiveId, accentOf, type Executive, type ExecutiveId } from '@/lib/roster';
@@ -83,7 +84,7 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
   const [knowledge, setKnowledge] = useState<KnowledgeEntry[]>([]);
   const [config, setConfig] = useState<ClientOpencodeConfig>({
     id: 1,
-    baseUrl: "https://opencode.ai/inference/openai/v1",
+    baseUrl: CONSOLE_BASE,
     hasApiKey: false,
     maskedApiKey: "",
     envHasApiKey: false,
@@ -765,6 +766,8 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
           <button
             type="button"
             onClick={() => setConfigModalOpen(true)}
+            aria-haspopup="dialog"
+            disabled={loadingInitial}
             className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-slate-800"
           >
             <Cpu className="h-3.5 w-3.5 text-blue-400" />
@@ -1152,8 +1155,8 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
                                 <span className="font-medium text-slate-500">
                                   📍 {zoneLabel}
                                 </span>
-                                <span className="font-mono">
-                                  {msg.modelUsed.replace(/^opencode\//i, "")}
+                                <span className="text-slate-600">
+                                  {msg.providerMode === "opencode-live" ? `Gateway · ${normalizeOpencodeModelId(msg.modelUsed)}` : "Local synthesis"}
                                 </span>
                               </div>
                             )}

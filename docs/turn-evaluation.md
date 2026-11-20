@@ -21,7 +21,7 @@
 
 ## Why evaluate the raw reply?
 
-`src/lib/opencode.ts` sends OpenAI-compatible `POST /chat/completions`. The saved per-role model wins over its profile default; the transport strips `opencode/`. The saved temperature is parsed and clamped to 0.1–1.2 (default 0.65). The bearer is resolved from saved key → `OPENCODE_API_KEY` → `OPENAI_API_KEY`; free IDs / `big-pickle` may try public access. The client tries the configured base and can retry the Zen base. Use an approved test environment for **all** possible destinations.
+`src/lib/opencode.ts` uses the same server-side Chat Completions transport as the gateway diagnostic. It calls only the selected base and never redirects to another billing plan. The saved per-executive model wins; `opencode/` and `opencode-go/` display prefixes are removed. Turn temperature is clamped to 0.1–1.2 (default 0.65). See [gateway setup](model-gateways.md) for workspace eligibility, credential scoping, session IDs and server-side header rules.
 
 No usable live text gives rule-based `opencode-local-runtime` output, not a local LLM. Live JSON is permissively parsed and missing fields can be filled from that synthesis. Unparseable live text can be returned as dialogue with fallback metadata **and still be labeled `opencode-live`**. The config modal's connection test checks reachability, not dialogue quality. To score raw format, inspect the assistant content at the `liveRaw` boundary in a synthetic test/debugger before parsing. Do not add production prompt/response logging.
 

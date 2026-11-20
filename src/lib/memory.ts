@@ -286,7 +286,8 @@ async function analyzePersona(): Promise<{ profile: CeoPersonaProfile; ceoTexts:
 
 async function refineWithOpencode(
   profile: CeoPersonaProfile,
-  ceoTexts: string[]
+  ceoTexts: string[],
+  sessionId: number | null,
 ): Promise<{ profile: CeoPersonaProfile; mode: string }> {
   if (!ceoTexts.length) return { profile, mode: "opencode-local-runtime" };
   try {
@@ -294,6 +295,7 @@ async function refineWithOpencode(
     if (!getRoster().some(isActive)) return {profile, mode: "opencode-local-runtime"};
     const raw = await tryLiveOpencodeCompletion({
       config,
+      sessionId,
       modelDisplayId: config.cooModel, // CEO persona service model, not a turn by the original COO
       maxTokens: 700,
       systemPrompt:
@@ -423,7 +425,7 @@ export function updatePersona(trigger: string, sessionId: number | null = null):
   const run = personaChain.then(async () => {
     await ensureMemoryBackfill();
     const analysis = await analyzePersona();
-    const refined = await refineWithOpencode(analysis.profile, analysis.ceoTexts);
+    const refined = await refineWithOpencode(analysis.profile, analysis.ceoTexts, sessionId);
     const profile = refined.profile;
     const [existing] = await db.select().from(ceoPersona).orderBy(asc(ceoPersona.id)).limit(1);
     for (const e of getRoster().filter(e=>!isActive(e))) {

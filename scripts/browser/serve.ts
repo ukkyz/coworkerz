@@ -4,6 +4,7 @@ interface TurnRequest {
   type: "turn";
   model: string;
   temperature: number;
+  routingId: string | null;
   messages: { role: string; content: string }[];
 }
 

@@ -85,7 +85,7 @@ test("executive profiles on an existing SQLite suite", async (t) => {
       t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 503 }));
       const plan = planDeliberationStep(getRoster(), [], 4, "architecture")!;
       const turn = await generateExecutiveDeliberationTurn({
-        plan, ceoQuestion: session.ceoQuestion, priorMessages: [], relevantKnowledge: [], config,
+        sessionId: session.id, plan, ceoQuestion: session.ceoQuestion, priorMessages: [], relevantKnowledge: [], config,
         speaker: requireActive(plan.speaker), listener: requireActive(plan.listener),
       });
       assert.equal(turn.providerMode, "opencode-local-runtime");

@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Archive, Plus, RotateCcw, X } from "lucide-react";
-import { isExecutiveRole, OPENCODE_MODELS } from "@/lib/executives";
+import { isExecutiveRole, EXECUTIVES } from "@/lib/executives";
 import {
   DEFAULT_PROFILES,
   PROFILE_FIELDS,
@@ -26,7 +26,7 @@ const blank = (): Draft => ({
   displayName: "",
   job: "",
   skillPrompt: "",
-  model: OPENCODE_MODELS[0].id,
+  model: EXECUTIVES.CTO.defaultModel,
   preset: "",
 });
 const from = (e: Executive): Draft => ({

@@ -112,6 +112,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const generated = await generateExecutiveDeliberationTurn({
+      sessionId: session.id,
       speaker,
       listener,
       ceoQuestion: session.ceoQuestion,
