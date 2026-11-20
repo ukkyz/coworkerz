@@ -37,6 +37,10 @@ DOM cues still cost CPU layout and compositing time; include them in the browser
 
 Incremental art budget per asset type: **zero** new mesh triangles, textures, WebGL draw calls, emitters or particles. A single reusable pair plays the speaker/listener (one for a CEO reply); offscreen members cost no rig, ring or nameplate. On phones the existing curtain transmission mesh, tabletop pad, presence rings and dialogue arc are hidden; the tabletop is opaque and only the active zone disc may blend. No additive FX were added. This bounds the added overdraw by construction; it is **not** a measured frame-time or full-scene throughput claim. Legacy rigs are not new LOD0–3 assets. Keep the intake gate above for future replacement art.
 
+### CEO radar: dashboard only
+
+The dashboard uses one static SVG: eight topic axes, four rings, at most eight data dots and one filled area (only for complete data). No new meshes, textures, WebGL draw calls, particles or animation loop. At phone widths the full-screen intelligence dock hides the room and its keyboard controls; the existing renderer pauses at zero size and resumes without rebuilding the scene. This is a work bound, not a hardware benchmark.
+
 ### Capture sheet (fill in, don't estimate results)
 
 1. Pin hardware/GPU, browser, build/revision, actual drawing-buffer size, DPR, shadow settings and session state. Use the same idle CEO POV, active `follow-huddle` and close-up path before/after. Use real hardware for sign-off; label emulation as such.

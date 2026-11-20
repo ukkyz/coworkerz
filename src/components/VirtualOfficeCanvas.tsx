@@ -1052,17 +1052,6 @@ export default function VirtualOfficeCanvas({
       actors.forEach(actor => { actor.floorRing.visible = !phone.matches; });
     };
     applyTier(); phone.addEventListener('change', applyTier);
-    // Observe the room itself: opening the dock can resize it without a window resize.
-    const handleResize = () => {
-      if (!container) return;
-      const w = container.clientWidth || window.innerWidth;
-      const h = container.clientHeight || window.innerHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
-    const observer = new ResizeObserver(handleResize); observer.observe(container);
-
     // Smooth camera preset target vectors
     const desiredCamPos = new THREE.Vector3(0, 2.15, 4.95);
     const desiredCamTarget = new THREE.Vector3(0, 1.25, -0.95);
@@ -1386,7 +1375,23 @@ export default function VirtualOfficeCanvas({
       }
     };
 
-    animate();
+    // The mobile intelligence dock covers the whole room. Keep the same scene but
+    // stop drawing at zero size; resizing or closing the dock resumes exactly one loop.
+    const handleResize = () => {
+      const w = container.clientWidth, h = container.clientHeight;
+      if (!w || !h) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = 0;
+        return;
+      }
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      if (!animFrameId) animFrameId = requestAnimationFrame(animate);
+    };
+    const observer = new ResizeObserver(handleResize);
+    observer.observe(container);
+    handleResize();
 
     return () => {
       cancelAnimationFrame(animFrameId);

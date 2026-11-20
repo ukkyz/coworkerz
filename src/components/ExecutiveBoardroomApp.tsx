@@ -8,6 +8,7 @@ import {
   BrainCircuit,
   Building2,
   CheckCircle2,
+  ChartRadar,
   ChevronRight,
   Cpu,
   Database,
@@ -41,6 +42,7 @@ import MemoryPanel from "./MemoryPanel";
 import type { KnowledgeOsTab } from './EnterpriseKnowledgeModal';
 import type { ActiveChoreography, CameraPreset } from './VirtualOfficeCanvas';
 import type { ClientOpencodeConfig } from './OpencodeConfigModal';
+const CeoBaselinePanel = dynamic(() => import("./CeoBaselinePanel"));
 const EnterpriseKnowledgeModal = dynamic(() => import('./EnterpriseKnowledgeModal'));
 const VirtualOfficeCanvas = dynamic(() => import('./VirtualOfficeCanvas'), {ssr: false});
 const OpencodeConfigModal = dynamic(() => import('./OpencodeConfigModal'));
@@ -62,7 +64,7 @@ interface BoardroomStats {
   activeTurnCount: number;
 }
 
-type DockTab = "transcript" | "knowledge" | "memory" | "history";
+type DockTab = "transcript" | "knowledge" | "memory" | "history" | "baseline";
 type ComposeTarget = "NEW" | "ALL" | ExecutiveId;
 
 export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster: Executive[] }) {
@@ -180,7 +182,7 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
       const res = await fetch(url);
       const data = await res.json();
       if (data.roster) setRoster(data.roster);
-      if (!sessionId) setDockOpen(window.innerWidth >= 768);
+      if (!sessionId) setDockOpen(open => open || window.innerWidth >= 768);
       if (data.sessions) setSessions(data.sessions);
       if ('activeSession' in data) setActiveSession(data.activeSession);
       if (data.messages) setMessages(data.messages);
@@ -631,9 +633,11 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
               <span className="text-sm font-bold tracking-tight text-slate-900">
                 AETHER 3D EXECUTIVE SUITE
               </span>
-              <span className="rounded-md bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-white uppercase">
-                CEO View
-              </span>
+              <button type="button" onClick={() => { setActiveTab("baseline"); setDockOpen(true); }}
+                title="Open the CEO knowledge baseline" aria-controls={dockOpen ? "intelligence-dock" : undefined}
+                className="inline-flex min-h-7 items-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
+                <ChartRadar aria-hidden="true" className="h-3.5 w-3.5 text-teal-200" /> CEO radar
+              </button>
             </div>
             <p className="hidden text-[11px] text-slate-500 md:block">
               Executive deliberations · Live roster
@@ -773,6 +777,7 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
             type="button"
             onClick={() => setDockOpen((v) => !v)}
             className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 hover:bg-slate-50"
+            aria-expanded={dockOpen} aria-controls={dockOpen ? "intelligence-dock" : undefined}
             title="Toggle Boardroom Intelligence Panel"
           >
             <ChevronRight
@@ -786,8 +791,8 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
 
       {/* Main Workspace: Full-Bleed 3D Virtual Office + Right Intelligence Dock */}
       <div className="relative flex flex-1 overflow-hidden">
-        {/* 3D Virtual Office Room Viewport */}
-        <div className="relative flex-1 overflow-hidden">
+        {/* A full-width mobile dock covers the room; keep its controls out of keyboard navigation. */}
+        <div className={`relative flex-1 overflow-hidden ${dockOpen ? "hidden sm:block" : ""}`}>
           {loadingInitial ? (
             <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-slate-100">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -1035,70 +1040,25 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
 
         {/* Right Glassmorphic Boardroom Intelligence Dock */}
         {dockOpen && (
-          <aside className="absolute inset-0 sm:static z-20 flex h-full w-full flex-col border-l border-slate-200/90 bg-white/94 backdrop-blur-md sm:w-[420px] shrink-0">
-            {/* Tabs */}
-            <div className="grid grid-cols-4 gap-1 border-b border-slate-200/80 bg-slate-50/80 p-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab("transcript")}
-                className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition ${
-                  activeTab === "transcript"
-                    ? "bg-white text-blue-700 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-                <span>Talk</span>
-                <span className="rounded-full bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600">
-                  {messages.length}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("knowledge")}
-                className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition ${
-                  activeTab === "knowledge"
-                    ? "bg-white text-teal-700 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <BrainCircuit className="h-3.5 w-3.5" />
-                <span>Insights</span>
-                <span className="rounded-full bg-teal-50 px-1.5 py-0.2 font-mono text-[10px] text-teal-700">
-                  {knowledge.length}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("memory")}
-                className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition ${
-                  activeTab === "memory"
-                    ? "bg-white text-indigo-700 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <UserRound className="h-3.5 w-3.5" />
-                <span>Memory</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("history")}
-                className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition ${
-                  activeTab === "history"
-                    ? "bg-white text-slate-900 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <History className="h-3.5 w-3.5" />
-                <span>Sessions</span>
-                <span className="rounded-full bg-slate-100 px-1.5 py-0.2 font-mono text-[10px] text-slate-600">
-                  {sessions.length}
-                </span>
-              </button>
+          <aside id="intelligence-dock" aria-label="Boardroom intelligence" className="absolute inset-0 sm:static z-20 flex h-full w-full flex-col border-l border-slate-200/90 bg-white/94 backdrop-blur-md sm:w-[420px] shrink-0">
+            <div role="group" aria-label="Intelligence views" className="grid shrink-0 grid-cols-5 gap-1 border-b border-slate-200 bg-slate-50 p-2">
+              {([
+                { id: "transcript", label: "Talk", Icon: MessageSquare, count: messages.length },
+                { id: "knowledge", label: "Insights", Icon: BrainCircuit, count: knowledge.length },
+                { id: "memory", label: "Memory", Icon: UserRound },
+                { id: "history", label: "Sessions", Icon: History, count: sessions.length },
+                { id: "baseline", label: "Radar", Icon: ChartRadar },
+              ] as const).map(view => (
+                <button key={view.id} type="button" onClick={() => setActiveTab(view.id)} aria-pressed={activeTab === view.id}
+                  className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg py-1.5 text-[11px] font-semibold focus-visible:outline-2 focus-visible:outline-blue-700 ${activeTab === view.id ? "bg-white text-blue-800 shadow-sm" : "text-slate-600 hover:bg-white"}`}>
+                  <span className="flex items-center gap-1"><view.Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                    {"count" in view && <span className="font-mono text-[10px]">{view.count}</span>}
+                  </span>
+                  {view.label}
+                </button>
+              ))}
             </div>
+            {activeTab === "baseline" && <CeoBaselinePanel />}
 
             {/* TAB 1: Live Walk-and-Talk Conversation Feed */}
             {activeTab === "transcript" && (

@@ -14,6 +14,7 @@ import {
   type ConversationMessage,
   type KnowledgeEntry,
 } from "@/db/schema";
+import { analyzeTopicSignals } from "./persona-topic-signals";
 import { ROOM_ZONES, RoomZoneId } from "./executives";
 import { isActive, isExecutiveId, type ExecutiveId } from "./roster";
 import { getMember, getRoster } from "./executive-profile-store";
@@ -171,25 +172,6 @@ export async function getExecutiveRecall(
 }
 
 // ---------- CEO persona analysis ----------
-const SKILL_LEXICON: Array<{ name: string; priority: string; re: RegExp }> = [
-  { name: "AI & Technology Strategy", priority: "AI, cloud & platform architecture bets",
-    re: /\b(ai|gpu|cloud|inference|models?|llm|clusters?|architecture|platform|latency|tokens?|agents?|autonomous|security|zero-trust|data|software|tech\w*)\b/gi },
-  { name: "Capital Allocation & Financial Acumen", priority: "Capital efficiency, margins & ROI",
-    re: /(\$[\d.,]+\s*[mbk]?|\b(ebitda|margins?|arr|revenue|budget|capital|roi|payback|cash|valuation|costs?|equity|invest\w*|financ\w*|profit\w*)\b)/gi },
-  { name: "Operational Execution & Scaling", priority: "Execution speed, SLAs & operating cadence",
-    re: /\b(execution|execute|rollout|onboarding|sla|operations?|operational|headcount|hiring|supply|vendors?|process\w*|delivery|timeline|\d+-day|turnaround)\b/gi },
-  { name: "M&A & Corporate Development", priority: "Inorganic growth & post-merger integration",
-    re: /\b(acqui\w*|mergers?|m&a|startups?|buyouts?|deals?|diligence|post-merger)\b/gi },
-  { name: "Go-To-Market & Global Expansion", priority: "Market expansion & enterprise sales",
-    re: /\b(europe\w*|global\w*|regions?|regional|markets?|expansion|expand\w*|sales|gtm|go-to-market|international)\b/gi },
-  { name: "Customer Retention & Growth", priority: "Customer retention & net revenue growth",
-    re: /\b(churn|retention|nrr|upsell|customers?|loyalty|adoption)\b/gi },
-  { name: "Risk Management & Governance", priority: "Risk, compliance & governance",
-    re: /\b(risks?|compliance|gdpr|dora|regulat\w*|governance|audit|downside|cannibaliz\w*|sovereign\w*)\b/gi },
-  { name: "Product & Pricing Innovation", priority: "Product strategy & monetization",
-    re: /\b(pricing|products?|tiers?|outcome-based|monetiz\w*|bundles?|seats?|seat-based|features?)\b/gi },
-];
-
 const THEME_STOP = new Set(
   "should would could about their there where which while without within through these those other first every under over into from with this that what when they them have will your ours walk talk align plan need want enterprise company question quarter".split(" ")
 );
@@ -212,23 +194,7 @@ async function analyzePersona(): Promise<{ profile: CeoPersonaProfile; ceoTexts:
   const botToBot = bots.filter((m) => m.targetRole !== "CEO" && m.targetRole !== "ALL").length;
 
 
-  const skills = SKILL_LEXICON.map((s) => {
-    let hits = 0;
-    let msgsWith = 0;
-    let last = "";
-    for (const t of texts) {
-      const h = (t.match(s.re) || []).length;
-      if (h > 0) {
-        hits += h;
-        msgsWith += 1;
-        last = t;
-      }
-    }
-
-    return { name: s.name, priority: s.priority, hits, msgsWith, last };
-  })
-    .filter((s) => s.hits > 0)
-    .sort((a, b) => b.hits - a.hits);
+  const skills = analyzeTopicSignals(texts);
 
   const quant = ratio(texts, /(\$|\d+%|\b\d+(\.\d+)?\s?(m|b|k|million|billion)\b)/i);
   const timeBox = ratio(texts, /(\d+[- ]?(day|week|month|quarter|year)s?|\bq[1-4]\b|this quarter|deadline|immediate\w*)/i);
@@ -279,7 +245,7 @@ async function analyzePersona(): Promise<{ profile: CeoPersonaProfile; ceoTexts:
     executiveSummary,
     skills: skills.map((s) => ({
       name: s.name,
-      score: Math.min(98, Math.round(38 + s.hits * 6 + s.msgsWith * 7)),
+      score: s.score,
       evidenceCount: s.hits,
       lastEvidence: clip(s.last, 120),
     })),

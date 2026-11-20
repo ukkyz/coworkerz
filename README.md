@@ -34,6 +34,12 @@ Open **Customize bots** to add an executive with a suggested or custom role, job
 
 **Existing database?** Back it up, stop old writers and run **`npm run db:migrate`**. No reseed. See the [migration, API transition and permissions guide](docs/executive-roster.md). In particular, `CFO` never becomes an alias for a successor.
 
+## Capture the CEO’s knowledge radar
+
+Choose **CEO radar** in the dashboard header, or **Radar** in the intelligence panel. The eight axes are the existing CEO persona topics. Each dot is a discussion signal on a 0–100 scale, **not a knowledge test**. A missing dot means *unobserved*, not zero. The table below the chart gives the exact scores and keyword counts. Seeded CEO messages count if you keep the demo conversation.
+
+The first view is an unsaved preview. Select **Capture baseline** to freeze the signals and date in SQLite. New messages, persona rebuilds, and app restarts do not change it. **Replace baseline…** requires confirmation and discards the previous snapshot. Viewing or capturing the chart makes no model calls. Existing installations need `npm run db:migrate` (migration `0003`); do not reseed.
+
 ## Database lifecycle
 
 | Command | When to run it |
@@ -52,6 +58,7 @@ Open **Customize bots** to add an executive with a suggested or custom role, job
 | `node --test scripts/brief.test.mjs` | Prompt assembly only, no app dependencies |
 | `npm run test:db` | Exercises fresh and populated temporary SQLite files: migrations, isolated profile writes/validation, fallback names, memory and enterprise retrieval |
 | `npm run test:roster:ui` | After `npm run build` and `npx playwright install chromium`, runs the keyboard/mobile profile and live-roster workflows in Chromium, restarts Next, and inspects mocked identity-scoped requests. `test:profiles:ui` runs just the original edit regression. Creates its own temporary SQLite file; no provider key or running server needed. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an existing Chromium executable. |
+| `npm run test:baseline:ui` | After the same production build/Chromium setup, exercises the CEO radar on mobile and desktop, capture, keyboard access, accessibility scan and persistence across a server restart. |
 | `npm run typecheck` / `npm run lint` | TypeScript / ESLint against the app |
 | `npm run build` then `npm start` | Production build then server; run `db:setup` against the target file first. The original Inter and Plus Jakarta Sans faces are bundled from pinned Fontsource packages via `next/font/local`; no Google Fonts connection is needed at build time. |
 
