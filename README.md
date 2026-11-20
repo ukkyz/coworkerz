@@ -12,6 +12,20 @@ node scripts/brief.mjs scene 'Batch the repeated walnut wall slats.' 'At most tw
 
 Paste the output into an agent that has this checkout. No install, database or API key is needed to prepare the brief. Prefer not to run a command? [Copy a task starter](prompts/README.md). [AGENTS.md](AGENTS.md) is the common entry point; the [architecture map](docs/architecture.md) explains which side of the UI/API/renderer boundary owns a change. For a directive to the **in-app executives** rather than to a coding agent, see the [synthetic pilot scenario](docs/turn-evaluation.md).
 
+## Sign in (required since Phase 0)
+
+Every route except `/api/health` and the sign-in endpoints now requires a signed session. Configure three secrets in `.env` before starting:
+
+```sh
+CW_SESSION_SECRET=$(node -e "console.log(crypto.randomBytes(32).toString('base64url'))")
+CEO_ACCESS_CODE='choose-a-long-sign-in-code'
+CW_SECRET_KEY=$(node -e "console.log(crypto.randomBytes(32).toString('base64url'))")  # seals provider keys
+```
+
+Open `/login` and enter the access code. Sessions last 8 hours and are `HttpOnly`, `SameSite=Lax`, and `Secure` with the `__Host-` prefix when `NODE_ENV=production`. Keep `CW_SECRET_KEY` outside the database volume: `opencode_configs.api_key` stores only an AES-256-GCM envelope, and an unreadable envelope is treated as no key.
+
+**If a secret is missing the app refuses to serve (503), it does not open up.** `GET /api/health` reports which dependency is unready. `CW_AUTH_DISABLED=1` exists for local demos only and is rejected in production. Any provider key written to a database file before migration `0005` was cleared by that migration: re-enter it once in **OpenCode API** settings and rotate it.
+
 ## Run the application locally
 
 1. Use **Node.js 22+** and npm. No database server, Docker container or API key is required for setup. The server uses Drizzle ORM with the native `better-sqlite3` driver. If npm invokes `node-gyp` on a network-restricted host, use matching local Node headers instead of downloading them: in this Arena environment, run `npm_config_nodedir=/usr/local npm ci` in place of `npm ci` below.
@@ -49,14 +63,14 @@ The first view is an unsaved preview. Select **Capture baseline** to freeze the 
 | `npm run db:seed` | After migrating a new suite. Adds OpenCode settings, a completed session, messages, notes, domains, taxonomy, documents/chunks and graph. No model calls. A transaction records the seed once; reruns preserve edits and deletions. |
 | `npm run db:setup` | Runs migrate then seed. Safe to repeat; regenerates taxonomy mirrors from the saved scheme. |
 
-**Deployment:** use a Node server with a writable, persistent **local** volume for the SQLite file and its WAL/SHM sidecars. Do not put it in `public/`, commit it, or rely on ephemeral/serverless instance storage. Run the setup job with development tooling installed. Restrict filesystem access: the DB can contain transcripts and credentials saved via the UI. Use SQLite's online backup facility (or stop writers and checkpoint before copying); copying only a live `.sqlite` file can omit recent writes.
+**Deployment:** terminate TLS in front of the app so the `__Host-` session cookie is accepted, and keep `CW_SECRET_KEY` in the platform secret manager rather than on the database volume. Use a Node server with a writable, persistent **local** volume for the SQLite file and its WAL/SHM sidecars. Do not put it in `public/`, commit it, or rely on ephemeral/serverless instance storage. Run the setup job with development tooling installed. Restrict filesystem access: the DB can contain transcripts and credentials saved via the UI. Use SQLite's online backup facility (or stop writers and checkpoint before copying); copying only a live `.sqlite` file can omit recent writes.
 
 **Existing PostgreSQL installations:** these are SQLite *schema* migrations, not a live data converter. Nothing reads, modifies or imports the old DB. Keep its backup; if history is required, migrate an empty SQLite file, import in foreign-key order preserving IDs (JSON as JSON text, booleans as 0/1 and dates as epoch milliseconds), validate row counts and `PRAGMA foreign_key_check` on a copy before cutover. Do not overlay the demo seed on an imported dataset with its own configuration and taxonomy.
 
 | Check | What it exercises |
 | --- | --- |
 | `node --test scripts/brief.test.mjs` | Prompt assembly only, no app dependencies |
-| `npm run test:db` | Exercises fresh and populated temporary SQLite files: migrations, isolated profile writes/validation, fallback names, memory and enterprise retrieval |
+| `npm run test:db` | Exercises fresh and populated temporary SQLite files: migrations, isolated profile writes/validation, fallback names, memory and enterprise retrieval, plus the **authorization matrix** (`scripts/authz.test.ts`) that fails if any route under `src/app/api` is reachable without a session or unclassified in `src/lib/session.ts` |
 | `npm run test:roster:ui` | After `npm run build` and `npx playwright install chromium`, runs the keyboard/mobile profile and live-roster workflows in Chromium, restarts Next, and inspects mocked identity-scoped requests. `test:profiles:ui` runs just the original edit regression. Creates its own temporary SQLite file; no provider key or running server needed. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an existing Chromium executable. |
 | `npm run test:gateway:ui` | After the same build/Chromium setup, exercises Go, Console and custom settings and same-session follow-ups with a stub. `npm run test:db` also checks the actual HTTP headers against a loopback receiver. Neither test contacts a paid provider. |
 | `npm run test:baseline:ui` | After the same production build/Chromium setup, exercises the CEO radar on mobile and desktop, capture, keyboard access, accessibility scan and persistence across a server restart. |

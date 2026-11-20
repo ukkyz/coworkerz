@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowRight,
@@ -16,6 +17,7 @@ import {
   FastForward,
   History,
   Loader2,
+  LogOut,
   MessageSquare,
   Pause,
   Play,
@@ -69,6 +71,7 @@ type DockTab = "transcript" | "knowledge" | "memory" | "history" | "baseline";
 type ComposeTarget = "NEW" | "ALL" | ExecutiveId;
 
 export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster: Executive[] }) {
+  const router = useRouter();
   const [roster, setRoster] = useState(initialRoster);
   const active = useMemo(() => roster.filter(isActive), [roster]);
   const byId = useMemo(() => new Map<string, Executive>(roster.map(e => [e.id,e])), [roster]);
@@ -773,6 +776,25 @@ export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster
             <Cpu className="h-3.5 w-3.5 text-blue-400" />
             <span>OpenCode API</span>
             <Settings2 className="h-3.5 w-3.5 opacity-75" />
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              // Same-origin POST, then a full reload so no client state survives the change.
+              await fetch("/api/auth/sign-out", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+              }).catch(() => {});
+              // Refresh so server components re-read the cleared cookie, then leave the console.
+              router.replace("/login");
+              router.refresh();
+            }}
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 hover:bg-slate-50"
+            title="Sign out"
+            aria-label="Sign out"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
           </button>
 
           {/* Toggle Right Intelligence Dock */}

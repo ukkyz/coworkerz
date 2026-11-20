@@ -57,6 +57,9 @@ export default function CustomizeBotsDialog({
     archive = roster.filter((e) => !isActive(e));
   const initial = members.find((e) => e.id === initialId) ?? members[0];
   const [id, setId] = useState<ExecutiveId | undefined>(initial?.id);
+  // Required whenever the skill prompt changes: it is the only field that executes as a
+  // model instruction, so every revision is logged with a reason.
+  const [changeReason, setChangeReason] = useState("");
   const member = members.find((e) => e.id === id);
   const [mode, setMode] = useState<Action>(initial ? "edit" : "add");
   const [draft, setDraft] = useState<Draft>(() => (initial ? from(initial) : blank()));
@@ -109,6 +112,16 @@ export default function CustomizeBotsDialog({
       if ("error" in checked) return fail(checked.error, checked.field);
       if (!draft.model.trim()) return fail("Enter a model ID.", "model");
       if (!draft.preset) return fail("Review and select an enterprise access preset.", "preset");
+      if (
+        mode === "edit" &&
+        member &&
+        draft.skillPrompt !== member.skillPrompt &&
+        !changeReason.trim()
+      )
+        return fail(
+          "Explain why the AI skill prompt changed. Every revision is recorded with its reason.",
+          "changeReason",
+        );
     }
     focusAfterSave.current = "save";
     setSaving(true);
@@ -126,6 +139,7 @@ export default function CustomizeBotsDialog({
                 model: draft.model,
                 preset: draft.preset,
                 ...(fresh && { roleName: draft.roleName }),
+                ...(changeReason.trim() && { changeReason: changeReason.trim() }),
               }),
       });
       const data = await res.json();
@@ -138,6 +152,7 @@ export default function CustomizeBotsDialog({
       const e: Executive | undefined = data.executive ?? next.find(isActive);
       focusAfterSave.current = e ? "member" : "roleName";
       onSaved(next);
+      setChangeReason("");
       choose(e ? "edit" : "add", e);
       setStatus(
         mode === "edit"
@@ -279,6 +294,27 @@ export default function CustomizeBotsDialog({
                   </label>
                 </div>
               )}
+              {mode === "edit" &&
+              member &&
+              draft.skillPrompt !== member.skillPrompt ? (
+                <label className={label}>
+                  Why is the AI skill prompt changing?
+                  <input
+                    {...a11y("changeReason" as keyof Draft)}
+                    name="changeReason"
+                    className={input}
+                    maxLength={200}
+                    required
+                    value={changeReason}
+                    onChange={(event) => setChangeReason(event.target.value)}
+                    placeholder="e.g. add a funding-gate requirement after the pilot review"
+                    aria-describedby="change-reason-help"
+                  />
+                  <span id="change-reason-help" className="mt-1 block text-xs font-normal text-slate-600">
+                    Stored with this revision. The CEO can review the prompt history later.
+                  </span>
+                </label>
+              ) : null}
               {PROFILE_KEYS.map((field) => (
                 <label className={label} key={field}>
                   {PROFILE_FIELDS[field].label}

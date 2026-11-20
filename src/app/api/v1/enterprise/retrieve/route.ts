@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  resolveEnterprisePrincipal,
   retrieveEnterpriseKnowledge,
 } from "@/lib/enterprise-knowledge";
+import { resolveApiPrincipal } from "@/lib/access";
+
+/** Session-aware version of the enterprise resolver: no session and no key is a 401. */
+async function resolveEnterprisePrincipal(req: NextRequest, bodyRole?: string) {
+  const auth = await resolveApiPrincipal(req, bodyRole);
+  if (auth.error)
+    // Anonymous, an invalid key and a retired identity all fail authentication (401);
+    // a valid non-CEO credential is a permission failure (403).
+    return {
+      ...auth,
+      status:
+        auth.status ??
+        (auth.principal.authType === "api-key" ? 403 : 401),
+    };
+  if (!auth.principal.allowedDomains.length)
+    return { ...auth, error: "No enterprise access in this scope.", status: 403 };
+  return { ...auth, status: 200 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +88,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as {
+    // Authorize before parsing: an unauthenticated caller must not be able to probe the
+    // body parser, and a malformed body must not become a 500.
+    const preflight = await resolveEnterprisePrincipal(req);
+    if (preflight.error) {
+      return NextResponse.json(
+        { error: preflight.error },
+        { status: preflight.status, headers: HEADERS }
+      );
+    }
+    const body = (await req.json().catch(() => null)) as {
       query?: string;
       domains?: string[];
       domain?: string;
@@ -82,7 +108,13 @@ export async function POST(req: NextRequest) {
       synthesizeAnswer?: boolean;
       includeSeparateAgentMemory?: boolean;
       asRole?: string;
-    };
+    } | null;
+    if (!body) {
+      return NextResponse.json(
+        { error: "A JSON body is required." },
+        { status: 400, headers: HEADERS }
+      );
+    }
 
     if ('asRole' in body && typeof body.asRole !== 'string') return NextResponse.json({error:'Invalid simulation identity.'}, {status:400,headers:HEADERS});
     const auth = await resolveEnterprisePrincipal(req, body.asRole);

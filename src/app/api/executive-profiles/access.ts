@@ -1,12 +1,32 @@
 import { RosterError } from "@/lib/executive-profile-store";
 import { type NextRequest, NextResponse } from "next/server";
+import { resolveApiPrincipal } from "@/lib/access";
+import { authMode, misconfiguration } from "@/lib/session";
 import { resolvePrincipal } from "@/lib/enterprise-knowledge";
 
-// Like the rest of the local boardroom, the interactive console assumes a trusted CEO.
-// An enterprise API key or a simulated executive is not a settings principal.
+/**
+ * Like the rest of the local boardroom, the interactive console assumes a trusted CEO —
+ * but "trusted" now means *a verified signed-in session*, not *nobody sent a credential*.
+ * An enterprise API key or a simulated executive is still not a settings principal.
+ */
 export async function requireCeoConsole(req: NextRequest) {
-  const { principal, error } = await resolvePrincipal(req);
-  if (error) return NextResponse.json({ error }, { status: 401 });
+  // An unconfigured deployment is an operator error, not an authentication failure.
+  if (authMode() === "misconfigured") {
+    const { status, error } = misconfiguration();
+    return NextResponse.json({ error }, { status: status ?? 503, headers: { "Cache-Control": "no-store" } });
+  }
+  // A presented-but-invalid credential never establishes an identity: 401, not 403.
+  if (req.headers.has("authorization") || req.headers.has("x-api-key")) {
+    const auth = await resolvePrincipal(req);
+    if (auth.error) return NextResponse.json({ error: auth.error }, { status: 401 });
+  }
+  const { principal, error } = await resolveApiPrincipal(req);
+  if (error) {
+    return NextResponse.json(
+      { error },
+      { status: principal.authType === "anonymous" ? 401 : 403 },
+    );
+  }
   if (principal.authType !== "ceo-session") {
     return NextResponse.json(
       { error: "This action requires the trusted CEO console." },

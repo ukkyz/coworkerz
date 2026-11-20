@@ -4,19 +4,19 @@ import type { ClearanceLevel, PrincipalRole } from "@/db/schema";
 import {
   createEnterpriseApiKey,
   listEnterpriseApiKeys,
-  resolvePrincipal,
   revokeEnterpriseApiKey,
 } from "@/lib/enterprise-knowledge";
+import { resolveApiPrincipal } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveApiPrincipal(req);
     if (auth.error || auth.principal.authType !== "ceo-session") {
       return NextResponse.json(
         { error: "CEO session required to inspect API keys." },
-        { status: 403 }
+        { status: auth.status ?? (auth.principal.authType === "api-key" ? 403 : 401) }
       );
     }
     const keys = await listEnterpriseApiKeys();
@@ -32,11 +32,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveApiPrincipal(req);
     if (auth.error || auth.principal.authType !== "ceo-session") {
       return NextResponse.json(
         { error: "Only the CEO may mint Enterprise Knowledge API keys." },
-        { status: 403 }
+        { status: auth.status ?? (auth.principal.authType === "api-key" ? 403 : 401) }
       );
     }
 
@@ -79,11 +79,11 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveApiPrincipal(req);
     if (auth.error || auth.principal.authType !== "ceo-session") {
       return NextResponse.json(
         { error: "Only the CEO may revoke API keys." },
-        { status: 403 }
+        { status: auth.status ?? (auth.principal.authType === "api-key" ? 403 : 401) }
       );
     }
     const id = Number(req.nextUrl.searchParams.get("id"));

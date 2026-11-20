@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { configureTestAuth, sessionHeaders } from "./test-session";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { NextRequest } from "next/server";
@@ -11,16 +12,20 @@ import { priorCfo, productHead, pilotLead, marker } from "./fixtures/roster-case
 import { isActive, profileOf } from "../src/lib/roster";
 import { planDeliberationStep } from "../src/lib/turn-planner";
 
+// The console routes now require a signed session. The roster suite exercises identity
+// and ACL behaviour, not authentication, so every request carries one by default.
 const req = (path: string, method = "GET", data?: object, headers?: Record<string, string>) =>
   new NextRequest(`http://suite.test${path}`, {
     method,
     body: data && JSON.stringify(data),
-    headers,
+    headers: sessionHeaders(headers ?? {}),
   });
 
 test("live roster on a populated, migrated SQLite file", async (t) => {
+  configureTestAuth();
   const dir = mkdtempSync(join(tmpdir(), "coworkerz-roster-"));
   Object.assign(process.env, {
+    ...{},
     DATABASE_URL: join(dir, "suite.sqlite"),
     MEMORY_DIR: join(dir, "memory"),
     KNOWLEDGE_DIR: join(dir, "knowledge"),

@@ -11,7 +11,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
-    "test:db": "tsx --test scripts/sqlite.test.ts scripts/executive-profiles.test.ts scripts/dynamic-roster.test.ts scripts/ceo-baseline.test.ts scripts/model-gateway.test.ts",
+    "test:db": "tsx --test scripts/sqlite.test.ts scripts/executive-profiles.test.ts scripts/dynamic-roster.test.ts scripts/ceo-baseline.test.ts scripts/model-gateway.test.ts scripts/authz.test.ts",
     "test": "node --test scripts/brief.test.mjs && npm run test:db",
     "test:profiles:ui": "playwright test scripts/browser/customize-bots.spec.ts --workers=1",
     "test:roster:ui": "playwright test scripts/browser/customize-bots.spec.ts scripts/browser/dynamic-roster.spec.ts --workers=1",

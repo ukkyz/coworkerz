@@ -195,6 +195,31 @@ gantt
 - `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` pass.
 - **Do not proceed if** any route can be reached without a session. There is no "temporarily disabled" version of this gate.
 
+#### Implementation status — shipped
+
+All eight items landed. What was verified, and how:
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| 0.1 Fail closed | Done. `resolvePrincipal` grants `ceo-session` only via `asCeoSession: true`, which only `readSession()` (a verified cookie) sets. | `authz.test.ts` "no default CEO principal is reachable without a verified session" |
+| 0.2 Real session | Done, **without adding a dependency**: HMAC-SHA256 over JSON claims, WebCrypto in the proxy and Node `crypto` server-side. `__Host-` + `Secure` in production, plain name over http so a dev browser accepts it. | cookie-attribute test; live 307 → `/login?next=/` |
+| 0.3 Deny-by-default proxy | Done as `src/proxy.ts` (Next 16 deprecates `middleware`). Unknown `/api` paths return 404, not a pass-through. | "middleware denies by default, including unknown API paths" |
+| 0.4 Authz matrix | Done: `scripts/authz.test.ts`, now in `npm test`. Compares `API_ROUTE_RULES` to the filesystem, then asserts 401 for every handler. | 19 assertions, all passing |
+| 0.5 Secrets out of the DB | Done as **AES-256-GCM envelope encryption** under `CW_SECRET_KEY` rather than `key_ref`+env-only, so the UI can still store a key while the file holds only ciphertext. Migration `0005` clears legacy plaintext. | proved on a real 0004 database holding `sk-legacy-LEAK-…`: after migration the column is `""` |
+| 0.6 CSRF | Done: `Sec-Fetch-Site` primary, `Origin`/`Host` fallback, bearer callers exempt (no ambient credential). | cross-site POST → 403; same-origin → 200 |
+| 0.7 Rate limits + kill switch | Done: sign-in budget (5 per IP per 15 min) and a provider egress budget (`CW_PROVIDER_RATE_LIMIT`), on top of the existing `OPENCODE_OFFLINE`. | throttled sign-in → 429 |
+| 0.8 Prompt-version registry | Done: `executive_prompt_versions` (migration `0006`, backfilled), reason required on change, UI field, archive preserves history. | "a skill-prompt edit is versioned and requires a reason" |
+
+**Measured gate:** `tsc` clean, `eslint .` clean, `npm test` **48/48**, `next build` succeeds with `ƒ Proxy (Middleware)` registered. The original attack replay (anonymous reads of `/api/boardroom`, `board_restricted` documents, anonymous `POST /api/knowledge`, `DELETE /api/knowledge?id=1`, and the `PUT /api/executive-profiles/CTO` prompt rewrite) now returns **401 on all ten requests**, over real HTTP, in both dev and production builds.
+
+#### Phase 0 — still open
+
+- **OIDC/SSO.** Phase 0 ships a single-operator access code. That is the right shape for one trusted install, not for a workforce; Phase 2 replaces it. Do not onboard external users on the access code.
+- **Process-local limiters.** `src/lib/sign-in.ts` and the provider budget are per process. Multi-instance deployment must move both to shared storage.
+- **Key rotation tooling.** `CW_SECRET_KEY` rotation needs a re-seal pass; the envelope has no key id yet, so rotating without re-sealing makes every stored key unreadable (safely — they fail closed).
+- **Provider key never re-entered** simply means no live model call; the app reports that through the existing diagnostics.
+- **Not done, deliberately:** the "truth" half of the phase name. `appliedCount` and the persona radar still measure conversation activity. Fixing that is Phase 1's rubric work, not a security change.
+
 ### Phase 1 — Excellence vertical slice (2 weeks + 2-week pilot)
 
 **Goal:** prove one employee's behaviour actually changes, with the smallest possible schema.
@@ -394,14 +419,14 @@ Target values per phase. "Current" is measured today.
 
 | Capability | Current | After P0 | After P1 | After P2 | After P3 |
 | --- | --- | --- | --- | --- | --- |
-| Anonymous access to tenant data | **yes** | no | no | no | no |
-| Auth | none | OIDC session | + roles | + SSO/SAML/SCIM | + access reviews |
+| Anonymous access to tenant data | **no** (closed in Phase 0) | no | no | no | no |
+| Auth | signed session + access code (Phase 0) | + OIDC | + roles | + SSO/SAML/SCIM | + access reviews |
 | Tenancy | single | single | single | Postgres RLS | + per-region |
-| Secrets at rest | plaintext in DB | vault ref | vault ref | per-tenant envelope | rotation policy |
+| Secrets at rest | AES-GCM envelope, master key outside DB (Phase 0) | + key ids | + rotation | per-tenant envelope | rotation policy |
 | Audit trail | none | writes only | all writes | reads of restricted data | hash-chained + export |
-| Metering / quotas | none | global | per-user | per-tenant | + chargeback |
+| Metering / quotas | sign-in + provider budgets (Phase 0) | + per-user | + per-tenant | + chargeback | + cost attribution |
 | Resilience | 1 attempt, 45 s | + limit | + retry | + breaker + queue | + SLOs |
-| Indexes | 0 | +2 | +4 | full set | reviewed |
+| Indexes | 2 (prompt versions) | +2 | +4 | full set | reviewed |
 | Model eval in CI | none | none | fixtures | golden set | regression gate |
 | Accessibility | scoped axe | unchanged | unchanged | unchanged | WCAG 2.2 AA + no-WebGL parity |
 | i18n | none | none | none | none | en + id |

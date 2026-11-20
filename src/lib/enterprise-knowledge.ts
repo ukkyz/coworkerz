@@ -59,7 +59,7 @@ const DEFAULT_ROLE_CLEARANCE: Record<"CEO" | "CTO" | "CFO" | "COO" | "EXTERNAL_A
 };
 
 export interface AccessPrincipal {
-  authType: "ceo-session" | "role-simulation" | "api-key";
+  authType: "ceo-session" | "role-simulation" | "api-key" | "anonymous";
   role: PrincipalRole;
   clearance: ClearanceLevel;
   allowedDomains: string[]; // ['*'] or domain keys
@@ -134,6 +134,11 @@ function denied(
     canReadAgentMemory: false,
   };
 }
+
+/** The fail-closed principal. Anonymous callers hold no domains, so no records resolve. */
+export function denyAnonymous(): AccessPrincipal {
+  return denied("anonymous", "EXTERNAL_AGENT");
+}
 export function makeRolePrincipal(
   role: PrincipalRole,
   authType: AccessPrincipal["authType"] = "role-simulation",
@@ -141,9 +146,18 @@ export function makeRolePrincipal(
   return lookupRights(role, authType)?.principal ?? denied(authType, role);
 }
 
+/**
+ * Resolve the membership and its policy from a single roster row. Never derive authority
+ * from a title, and never from the absence of a credential.
+ *
+ * `asCeoSession` must be set by the caller only after it has verified a signed session
+ * cookie. It is no longer inferred from a missing header, which is what made the console
+ * answer anonymous internet callers as the CEO.
+ */
 export async function resolvePrincipal(
   req: NextRequest,
   bodyRole?: string,
+  options: { asCeoSession?: boolean } = {},
 ): Promise<{ principal: AccessPrincipal; error?: string }> {
   const auth = req.headers.get("authorization") ?? "";
   const key = (
@@ -189,6 +203,10 @@ export async function resolvePrincipal(
     return rights
       ? { principal: rights.principal }
       : { principal: denied("role-simulation"), error: "Unknown or retired principal." };
+  }
+  // Fail closed. A trusted-CEO console is a claim the caller must prove, not a default.
+  if (!options.asCeoSession) {
+    return { principal: denyAnonymous(), error: "Sign in required." };
   }
   return { principal: makeRolePrincipal("CEO", "ceo-session") };
 }

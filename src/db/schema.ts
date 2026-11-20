@@ -82,6 +82,22 @@ export const executiveRoster = sqliteTable("executive_roster", {
   retiredAfter: integer("retired_after_message"),
 }, t => [uniqueIndex("active_executive_title").on(t.titleKey).where(sql`${t.retiredAfter} is null`)]);
 
+/**
+ * Append-only history for the one field that executes as a model instruction.
+ * `skill_prompt` on the roster row is the current revision; this table records who
+ * changed it, why, and what it replaced. Retiring an executive keeps the log.
+ */
+export const executivePromptVersions = sqliteTable("executive_prompt_versions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  executiveId: text("executive_id").$type<ExecutiveId>().notNull(),
+  version: integer("version").notNull(),
+  skillPrompt: text("skill_prompt").notNull(),
+  previousPrompt: text("previous_prompt"),
+  changeReason: text("change_reason").notNull(),
+  actor: text("actor").notNull().default("CEO"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
+}, t => [uniqueIndex("prompt_version_per_executive").on(t.executiveId, t.version)]);
+
 export const opencodeConfigs = sqliteTable("opencode_configs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   baseUrl: text("base_url")
@@ -437,3 +453,4 @@ export type DeliberationSession = typeof deliberationSessions.$inferSelect;
 export type ConversationMessage = typeof conversationMessages.$inferSelect;
 export type KnowledgeEntry = typeof knowledgeEntries.$inferSelect;
 export type OpencodeConfig = typeof opencodeConfigs.$inferSelect;
+export type ExecutivePromptVersion = typeof executivePromptVersions.$inferSelect;

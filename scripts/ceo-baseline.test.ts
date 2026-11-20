@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { configureTestAuth, sessionHeaders } from "./test-session";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { NextRequest } from "next/server";
 import { CEO_TOPICS, type CeoRadar } from "@/lib/ceo-topics";
@@ -13,7 +14,7 @@ const request = (body?: unknown, headers?: Record<string, string>) =>
   new NextRequest("http://suite.test/api/ceo-baseline", {
     method: body === undefined ? "GET" : "POST",
     body: JSON.stringify(body),
-    headers,
+    headers: sessionHeaders(headers ?? {}),
   });
 
 test("topic rules keep all eight persona axes distinct, cap repeated mentions, and don't score silence", () => {
@@ -28,8 +29,10 @@ test("topic rules keep all eight persona axes distinct, cap repeated mentions, a
 });
 
 test("CEO-only conversation baseline on a migrated SQLite file", async (t) => {
+  configureTestAuth();
   const dir = mkdtempSync(join(tmpdir(), "coworkerz-radar-"));
   Object.assign(process.env, {
+    ...{},
     DATABASE_URL: join(dir, "suite.sqlite"),
     OPENCODE_OFFLINE: "1",
     MEMORY_DIR: join(dir, "memory"),

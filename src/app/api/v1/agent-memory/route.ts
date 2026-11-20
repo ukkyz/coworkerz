@@ -3,7 +3,7 @@ import { getMember } from "@/lib/executive-profile-store";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { executiveMemories } from "@/db/schema";
-import { resolvePrincipal } from "@/lib/enterprise-knowledge";
+import { resolveApiPrincipal } from "@/lib/access";
 import {
   ensureMemoryBackfill,
   getMemoryStats,
@@ -30,7 +30,7 @@ export async function OPTIONS() {
  */
 export async function GET(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveApiPrincipal(req);
     if (auth.error) {
       return NextResponse.json(
         { error: auth.error },

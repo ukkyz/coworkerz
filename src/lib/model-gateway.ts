@@ -14,6 +14,26 @@ import {
   sameGateway,
 } from "./gateway-endpoints";
 import { readHeaderRules } from "./gateway-headers";
+import { isSealed, seal, unseal } from "./secret-box";
+
+/** Per-process token bucket. A multi-instance deployment points this at Redis. */
+const providerBudget = (() => {
+  const limit = Number(process.env.CW_PROVIDER_RATE_LIMIT ?? 30);
+  return { limit: Number.isFinite(limit) && limit > 0 ? limit : 30, windowMs: 60_000, hits: [] as number[] };
+})();
+
+/** Refuse provider egress once the local budget for this minute is spent. */
+export function providerEgressAllowed(now: number = Date.now()): boolean {
+  providerBudget.hits = providerBudget.hits.filter((t) => now - t < providerBudget.windowMs);
+  if (providerBudget.hits.length >= providerBudget.limit) return false;
+  providerBudget.hits.push(now);
+  return true;
+}
+
+/** Exported for tests only. */
+export function resetProviderBudget() {
+  providerBudget.hits = [];
+}
 
 type Settings = Pick<OpencodeConfig, "baseUrl" | "apiKey">;
 type Draft = { baseUrl?: string; apiKey?: string; clearApiKey?: boolean };
@@ -23,10 +43,14 @@ export function keyForSave(current: Settings, base: string, draft: Draft): strin
   if (draft.clearApiKey) return "";
   if (draft.apiKey !== undefined && typeof draft.apiKey !== "string")
     throw new GatewaySettingsError("Invalid API key field.");
-  const key =
-    draft.apiKey?.trim() || (sameGateway(current.baseUrl, base) ? current.apiKey.trim() : "");
-  validateBearer(key);
-  return key;
+  if (draft.apiKey !== undefined && draft.apiKey.trim()) {
+    const entered = draft.apiKey.trim();
+    validateBearer(entered);
+    return seal(entered).sealed;
+  }
+  // A saved credential never follows a URL edit to a different destination.
+  if (sameGateway(current.baseUrl, base)) return current.apiKey;
+  return "";
 }
 
 function validateBearer(key: string) {
@@ -48,9 +72,19 @@ function envBearer(base: string): string {
   return base === OPENAI_BASE ? process.env.OPENAI_API_KEY?.trim() || "" : "";
 }
 
-export function publicKeyState(base: string | null, storedKey: string) {
+/**
+ * The credential for this base: a sealed row value first, then the deployment environment.
+ * A legacy plaintext row is deliberately not returned; the migration cleared those and the
+ * operator re-enters the key once.
+ */
+export function storedKey(stored: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (!stored.trim()) return "";
+  return isSealed(stored) ? (unseal(stored, env) ?? "") : "";
+}
+
+export function publicKeyState(base: string | null, storedKeyValue: string) {
   const envHasApiKey = base !== null && Boolean(envBearer(base));
-  const stored = Boolean(storedKey.trim());
+  const stored = Boolean(storedKey(storedKeyValue));
   return { hasApiKey: stored || envHasApiKey, maskedApiKey: stored ? "••••" : "", envHasApiKey };
 }
 
@@ -150,10 +184,22 @@ export async function requestChatCompletion(params: {
 }): Promise<CompletionResult> {
   if (process.env.OPENCODE_OFFLINE === "1")
     return { ok: false, message: "Provider egress is disabled for this instance." };
+  if (!providerEgressAllowed())
+    return {
+      ok: false,
+      message: "The local provider budget for this minute is spent. Retry shortly.",
+      httpStatus: 429,
+    };
   let base: string, headers: Headers, model: string;
   try {
     base = gatewayBase(params.draft?.baseUrl ?? params.config.baseUrl);
-    const key = keyForSave(params.config, base, params.draft ?? {}) || envBearer(base);
+    // A saved credential is pinned to the destination it was entered for. It must never
+    // follow a URL edit to a different gateway.
+    const saved =
+      sameGateway(params.config.baseUrl, base) && !params.draft?.clearApiKey
+        ? storedKey(params.config.apiKey)
+        : "";
+    const key = (params.draft?.apiKey?.trim() ?? "") || saved || envBearer(base);
     validateBearer(key);
     if (isOpenCode(base) && !key)
       throw new GatewaySettingsError(

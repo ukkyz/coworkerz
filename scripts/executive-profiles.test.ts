@@ -3,6 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { configureTestAuth, sessionHeaders } from "./test-session";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import {profileOf} from "../src/lib/roster";
 import { NextRequest } from "next/server";
@@ -14,6 +15,7 @@ const maya: BotProfile = {
 };
 
 test("executive profiles on an existing SQLite suite", async (t) => {
+  configureTestAuth();
   const dir = mkdtempSync(join(tmpdir(), "coworkerz-profiles-"));
   process.env.DATABASE_URL = join(dir, "suite.sqlite");
   const { db, schema: s } = await import("@/db");
@@ -35,9 +37,18 @@ test("executive profiles on an existing SQLite suite", async (t) => {
     const { GET } = await import("@/app/api/executive-profiles/route");
     const { PUT } = await import("@/app/api/executive-profiles/[role]/route");
     const url = "http://boardroom.test/api/executive-profiles";
-    const read = async () => (await (await GET(new NextRequest(url))).json()).profiles;
+    const read = async () =>
+      (await (await GET(new NextRequest(url, { headers: sessionHeaders() }))).json()).profiles;
+    // Phase 0 requires a reason for any skill-prompt change. Supplying one here keeps the
+    // identity assertions below focused on the behaviour they were written to cover.
+    const withReason = (body: unknown) =>
+      body && typeof body === "object" && !Array.isArray(body) && "skillPrompt" in body
+        ? { changeReason: "Synthetic profile edit for the test suite.", ...body }
+        : body;
     const put = (role: string, body: unknown) => PUT(new NextRequest(`${url}/${role}`, {
-      method: "PUT", body: JSON.stringify(body),
+      body: JSON.stringify(withReason(body)),
+      headers: sessionHeaders({ "Content-Type": "application/json" }),
+      method: "PUT",
     }), { params: Promise.resolve({ role }) });
 
     await t.test("migration leaves rows intact, no overrides or seed required", async () => {
@@ -72,9 +83,11 @@ test("executive profiles on an existing SQLite suite", async (t) => {
         assert.equal((await put("CFO", bad)).status, 400);
       }
       const context = { params: Promise.resolve({ role: "CFO" }) };
-      assert.equal((await PUT(new NextRequest(`${url}/CFO`, { method: "PUT", body: "{" }), context)).status, 400);
-      assert.equal((await PUT(new NextRequest(`${url}/CFO?asRole=CTO`, { method: "PUT", body: JSON.stringify(maya) }), context)).status, 403);
+      assert.equal((await PUT(new NextRequest(`${url}/CFO`, { method: "PUT", body: "{", headers: sessionHeaders() }), context)).status, 400);
+      assert.equal((await PUT(new NextRequest(`${url}/CFO?asRole=CTO`, { method: "PUT", body: JSON.stringify(maya), headers: sessionHeaders() }), context)).status, 403);
       assert.equal((await GET(new NextRequest(url, { headers: { "x-api-key": "invalid-fixture" } }))).status, 401);
+      // ...and without any credential at all, which used to be treated as the CEO.
+      assert.equal((await GET(new NextRequest(url))).status, 401);
       assert.deepEqual(await read(), { ...DEFAULT_PROFILES, CFO: maya });
     });
 

@@ -4,9 +4,26 @@ import { db } from "@/db";
 import { ekDocuments, type ClearanceLevel } from "@/db/schema";
 import {
   canPrincipalRead,
-  resolveEnterprisePrincipal,
   reviewEnterpriseDocument,
 } from "@/lib/enterprise-knowledge";
+import { resolveApiPrincipal } from "@/lib/access";
+
+/** Session-aware version of the enterprise resolver: no session and no key is a 401. */
+async function resolveEnterprisePrincipal(req: NextRequest, bodyRole?: string) {
+  const auth = await resolveApiPrincipal(req, bodyRole);
+  if (auth.error)
+    // Anonymous, an invalid key and a retired identity all fail authentication (401);
+    // a valid non-CEO credential is a permission failure (403).
+    return {
+      ...auth,
+      status:
+        auth.status ??
+        (auth.principal.authType === "api-key" ? 403 : 401),
+    };
+  if (!auth.principal.allowedDomains.length)
+    return { ...auth, error: "No enterprise access in this scope.", status: 403 };
+  return { ...auth, status: 200 };
+}
 
 export const dynamic = "force-dynamic";
 

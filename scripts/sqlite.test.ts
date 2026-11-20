@@ -4,14 +4,17 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { configureTestAuth, sessionHeaders } from "./test-session";
 import { eq, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
 
 // Set the environment *before* importing the server connection. Both setup jobs run
 // in separate processes, so an accidental in-memory DB cannot make this test pass.
 test("SQLite setup and application integration", async (t) => {
+  configureTestAuth();
   const dir = mkdtempSync(join(tmpdir(), "coworkerz-db-"));
   Object.assign(process.env, {
+    ...{},
     DATABASE_URL: `file:${join(dir, "nested", "suite.sqlite")}`,
     MEMORY_DIR: join(dir, "memory"), KNOWLEDGE_DIR: join(dir, "knowledge"),
     OPENCODE_BASE_URL: "https://synthetic.invalid/v1", OPENCODE_API_KEY: "", OPENAI_API_KEY: "",
@@ -22,8 +25,12 @@ test("SQLite setup and application integration", async (t) => {
   const run = (script: string) => npm
     ? execFileSync(process.execPath, [npm, "run", script], { stdio: "pipe" })
     : execFileSync("npm", ["run", script], { stdio: "pipe" });
+  // Every console request now needs a signed session; the helper merges one in.
   const request = (path: string, init?: ConstructorParameters<typeof NextRequest>[1]) =>
-    new NextRequest(`http://boardroom.test${path}`, init);
+    new NextRequest(`http://boardroom.test${path}`, {
+      ...init,
+      headers: sessionHeaders((init?.headers as Record<string, string>) ?? {}),
+    });
 
   try {
     run("db:migrate");
@@ -49,7 +56,14 @@ test("SQLite setup and application integration", async (t) => {
       const session = db.select().from(s.deliberationSessions).get()!;
       await t.test("the boardroom reads the seeded file; API writes round-trip typed JSON, booleans and dates", async () => {
         const health = await import("@/app/api/health/route");
-        assert.deepEqual(await (await health.GET()).json(), { ok: true });
+        const readiness = await health.GET();
+        assert.equal(readiness.status, 200);
+        // Readiness states which dependency is up, without ever echoing a secret.
+        assert.deepEqual(await readiness.json(), {
+          ok: true,
+          database: true,
+          auth: { mode: "session", ready: true },
+        });
         const boardroom = await import("@/app/api/boardroom/route");
         const res = await boardroom.GET(request("/api/boardroom"));
         assert.equal(res.status, 200);

@@ -7,6 +7,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { configureTestAuth, sessionHeaders } from "./test-session";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { NextRequest } from "next/server";
 import { CONSOLE_BASE, GO_BASE, OPENAI_BASE, gatewayBase } from "@/lib/gateway-endpoints";
@@ -25,7 +26,7 @@ const api = (method: string, body?: unknown, path = "/api/opencode-config") =>
   new NextRequest(`http://suite.test${path}`, {
     method,
     body: body === undefined ? undefined : JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
+    headers: sessionHeaders({ "Content-Type": "application/json" }),
   });
 
 test("header rules match an exact normalized base and enforce literal prefixes and safe fields", () => {
@@ -74,10 +75,12 @@ test("header rules match an exact normalized base and enforce literal prefixes a
 });
 
 test("live gateway transport, CEO settings and diagnostics", async (t) => {
+  configureTestAuth();
   const dir = mkdtempSync(join(tmpdir(), "coworkerz-gateway-"));
   const workspaceKey = randomUUID(),
     openAIKey = randomUUID();
   Object.assign(process.env, {
+    ...{},
     DATABASE_URL: join(dir, "suite.sqlite"),
     MEMORY_DIR: join(dir, "memory"),
     KNOWLEDGE_DIR: join(dir, "knowledge"),
@@ -86,6 +89,7 @@ test("live gateway transport, CEO settings and diagnostics", async (t) => {
     OPENCODE_API_KEY: "",
     OPENAI_API_KEY: openAIKey,
     OPENCODE_HEADER_RULES: rules(GO_BASE),
+    CW_SECRET_KEY: "test-master-key-for-the-gateway-suite-0001",
   });
   const { db, schema: s } = await import("@/db");
   // Only this loopback receiver sees real HTTP. All public-provider traffic is intercepted before dispatch.
@@ -117,12 +121,15 @@ test("live gateway transport, CEO settings and diagnostics", async (t) => {
     const origin = `http://127.0.0.1:${(receiver.address() as AddressInfo).port}`;
     const base = origin + "/proxy/v1";
     migrate(db, { migrationsFolder: "drizzle" });
+    // A stored credential is sealed at rest; the transport unseals it before egress.
+    const { seal } = await import("@/lib/secret-box");
     const config = db
       .insert(s.opencodeConfigs)
-      .values({ baseUrl: GO_BASE, apiKey: workspaceKey })
+      .values({ baseUrl: GO_BASE, apiKey: seal(workspaceKey).sealed })
       .returning()
       .get();
     const { POST, GET, PUT } = await import("@/app/api/opencode-config/route");
+    const { storedKey } = await import("@/lib/model-gateway");
     const { tryLiveOpencodeCompletion: live } = await import("@/lib/opencode");
     const complete = (sessionId: number) =>
       live({
@@ -323,7 +330,7 @@ test("live gateway transport, CEO settings and diagnostics", async (t) => {
         assert.equal(traffic.at(-1)!.headers.authorization, undefined);
         const saved = await PUT(api("PUT", { baseUrl: base }));
         assert.equal(saved.status, 200);
-        assert.equal(db.select().from(s.opencodeConfigs).get()!.apiKey, ""); // URL change did not move the stored credential
+        assert.equal(storedKey(db.select().from(s.opencodeConfigs).get()!.apiKey), ""); // URL change did not move the stored credential
         const publicSettings = await (await GET(api("GET"))).json();
         assert.equal(publicSettings.config.baseUrl, base);
         assert.equal(publicSettings.config.envHasApiKey, true);
@@ -350,7 +357,7 @@ test("live gateway transport, CEO settings and diagnostics", async (t) => {
         assert.equal(settings.config.maskedApiKey, "••••");
         assert.ok(!JSON.stringify(settings).includes(savedKey));
         await PUT(api("PUT", { baseUrl: base }));
-        assert.equal(db.select().from(s.opencodeConfigs).get()!.apiKey, savedKey);
+        assert.equal(storedKey(db.select().from(s.opencodeConfigs).get()!.apiKey), savedKey);
         await probe({ apiKey: draftKey });
         assert.equal(traffic.at(-1)!.headers.authorization, `Bearer ${draftKey}`);
         await probe();
@@ -358,10 +365,10 @@ test("live gateway transport, CEO settings and diagnostics", async (t) => {
         await probe({ clearApiKey: true });
         assert.equal(traffic.at(-1)!.headers.authorization, `Bearer ${workspaceKey}`);
         await PUT(api("PUT", { clearApiKey: true }));
-        assert.equal(db.select().from(s.opencodeConfigs).get()!.apiKey, "");
+        assert.equal(storedKey(db.select().from(s.opencodeConfigs).get()!.apiKey), "");
 
         db.update(s.opencodeConfigs)
-          .set({ baseUrl: `${base}?token=${draftKey}`, apiKey: savedKey })
+          .set({ baseUrl: `${base}?token=${draftKey}`, apiKey: seal(savedKey).sealed })
           .run(); // legacy row, before URL validation
         const board = await import("@/app/api/boardroom/route");
         for (const response of [
@@ -377,7 +384,7 @@ test("live gateway transport, CEO settings and diagnostics", async (t) => {
         assert.equal((await probe()).reachable, false);
         assert.equal(fetch.mock.callCount(), before);
         await PUT(api("PUT", { baseUrl: base }));
-        assert.equal(db.select().from(s.opencodeConfigs).get()!.apiKey, "");
+        assert.equal(storedKey(db.select().from(s.opencodeConfigs).get()!.apiKey), "");
       },
     );
   } finally {

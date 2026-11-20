@@ -543,7 +543,13 @@ export default function EnterpriseKnowledgeModal({
       if (mintedKey) {
         headers["Authorization"] = `Bearer ${mintedKey}`;
       } else if (endpoint === "agent-memory-isolation") {
-        headers["X-Simulate-Role"] = "EXTERNAL_AGENT";
+        // A key-less simulated agent is no longer anonymous. This identity needs a real key,
+        // so the isolation probe reports the honest result rather than a simulated 403.
+        setLiveTestOutput(
+          "Mint a scoped key and use it here. Simulated identities without a key are rejected, which is the isolation guarantee this probe demonstrates.",
+        );
+        setLiveTesting(false);
+        return;
       }
 
       let res: Response;

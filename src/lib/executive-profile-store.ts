@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, type AppDatabase } from "@/db";
-import { deliberationSessions, executiveRoster as members, opencodeConfigs } from "@/db/schema";
+import {
+  deliberationSessions,
+  executivePromptVersions as promptVersions,
+  executiveRoster as members,
+  opencodeConfigs,
+} from "@/db/schema";
 import { validateProfile } from "./executive-profiles";
 import { isExecutiveRole } from "./executives";
 import {
@@ -109,7 +114,66 @@ export function validateModel(value: unknown) {
     throw new RosterError("Enter a valid model ID.");
   return value.trim();
 }
-const editable = ["displayName", "job", "skillPrompt", "model", "preset"];
+const editable = ["displayName", "job", "skillPrompt", "model", "preset", "changeReason"];
+export const PROMPT_REASON_MAX = 200;
+
+/**
+ * `skillPrompt` is the only profile field that executes as a model instruction, so a change
+ * to it must say why. The reason lands in the append-only prompt log with the diff.
+ */
+function promptReason(value: unknown, existingPrompt: string, nextPrompt: string): string | null {
+  if (existingPrompt === nextPrompt) return null;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new RosterError(
+      "Changing the AI skill prompt requires a change reason.",
+      400,
+      "changeReason",
+    );
+  }
+  const reason = value.trim();
+  if (reason.length > PROMPT_REASON_MAX)
+    throw new RosterError(
+      `Keep the change reason under ${PROMPT_REASON_MAX} characters.`,
+      400,
+      "changeReason",
+    );
+  return reason;
+}
+
+/** Append the next revision. Called inside the write transaction, never in a request after it. */
+export function recordPromptVersion(
+  tx: AppDatabase,
+  executiveId: ExecutiveId,
+  skillPrompt: string,
+  previousPrompt: string | null,
+  changeReason: string,
+  actor = "CEO",
+) {
+  const latest = tx
+    .select({ version: promptVersions.version })
+    .from(promptVersions)
+    .where(eq(promptVersions.executiveId, executiveId))
+    .orderBy(sql`${promptVersions.version} desc`)
+    .limit(1)
+    .get();
+  const version = (latest?.version ?? 0) + 1;
+  tx.insert(promptVersions)
+    .values({ executiveId, version, skillPrompt, previousPrompt, changeReason, actor })
+    .run();
+  return version;
+}
+
+export function promptHistory(id: string, limit = 20) {
+  if (!isExecutiveId(id)) return [];
+  return db
+    .select()
+    .from(promptVersions)
+    .where(eq(promptVersions.executiveId, id))
+    .orderBy(sql`${promptVersions.version} desc`)
+    .limit(limit)
+    .all();
+}
+
 export function saveExecutiveProfile(id: string, input: unknown) {
   const data = body(input, editable);
   return db.transaction(
@@ -119,12 +183,24 @@ export function saveExecutiveProfile(id: string, input: unknown) {
       if (!isReaderPreset(preset) && !(preset === "legacy" && current.preset === "legacy"))
         throw new RosterError("Choose a permission preset.");
       const model = data.model === undefined ? current.model : validateModel(data.model);
+      const profile = settings(data);
+      // Audit the instruction change before it becomes effective.
+      const reason = promptReason(data.changeReason, current.skillPrompt, profile.skillPrompt);
       const changes: Pick<Executive, "displayName" | "job" | "skillPrompt" | "model" | "preset"> = {
-        ...settings(data),
+        ...profile,
         model,
         preset,
       };
       tx.update(members).set(changes).where(eq(members.id, current.id)).run();
+      if (reason) {
+        recordPromptVersion(
+          tx,
+          current.id,
+          profile.skillPrompt,
+          current.skillPrompt,
+          reason,
+        );
+      }
       if (data.model !== undefined && isExecutiveRole(current.id)) {
         const key = { CTO: "ctoModel", CFO: "cfoModel", COO: "cooModel" }[current.id];
         tx.update(opencodeConfigs)
@@ -190,11 +266,15 @@ export function createExecutive(input: unknown, replacing?: string) {
         throw new RosterError("Another active executive already has that role title.", 409);
       }
       const id: ExecutiveId = `exec-${randomUUID()}`;
-      return tx
+      const created = tx
         .insert(members)
         .values({ id, roleName, titleKey, ...profile, model, preset, joinedAfter: boundary })
         .returning(fields)
         .get();
+      // A new identity starts its prompt log at the version it was created with, so the
+      // first edit already has a predecessor to diff against.
+      recordPromptVersion(tx, id, created.skillPrompt, null, "created", "CEO");
+      return created;
     },
     { behavior: "immediate" },
   );

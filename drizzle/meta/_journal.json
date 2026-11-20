@@ -36,6 +36,20 @@
       "when": 1795166321259,
       "tag": "0004_gateway_request_state",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795172269537,
+      "tag": "0005_sealed_provider_secrets",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795172684057,
+      "tag": "0006_prompt_version_registry",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resolveApiPrincipal } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,17 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
+  // The document enumerates the whole enterprise surface; it is not a public asset.
+  const auth = await resolveApiPrincipal(req);
+  if (auth.error) {
+    return NextResponse.json(
+      { error: auth.error },
+      {
+        status: auth.status ?? (auth.principal.authType === "api-key" ? 403 : 401),
+        headers: HEADERS,
+      },
+    );
+  }
   const origin = req.nextUrl.origin;
 
   const openAiTools = [
