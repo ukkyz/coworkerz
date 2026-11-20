@@ -40,3 +40,7 @@ The [radar panel](../src/components/CeoBaselinePanel.tsx) fetches `GET /api/ceo-
 `POST /api/ceo-baseline` accepts only `{expectedRevision: number}`: `0` for first capture, the displayed revision for explicit replacement. An immediate transaction reads the source and saves the snapshot; a stale revision returns 409 and an empty source returns 422 without touching the baseline. Migration `0003` creates the empty singleton table without copying transcripts or seeding scores. Exported memories, enterprise retrieval and model prompts do not consume the snapshot.
 
 **Proposed, not implemented:** [ADR-001 · Measure a practiced behavior, not conversation activity](decisions/0001-personal-excellence.md) describes how the human CEO could track personal progress without turning persona scores or knowledge retrieval into performance grades.
+
+## Model gateway boundary
+
+The boardroom owns a conversation ID; the transport maps it to an opaque OpenCode session. Turns, service completions and the diagnostic all use one Chat Completions sender. Provider-specific extra headers are server deployment policy keyed by exact base, not role/profile fields. SQLite already provides the durability and atomic allocation needed for optional request numbering. The trade-offs are one local write per numbered attempt and no transparent cross-provider failover: credentials, transcripts and billing stay at the chosen destination. See [gateway setup](model-gateways.md).

@@ -1,4 +1,4 @@
-// Private child of customize-bots.spec.ts. Serve the production build with a fully
+// Private child of the browser workflows. Serve the production build with a fully
 // stubbed server-side fetch: no test prompts or credentials can leave via a gateway.
 import { createServer } from 'node:http';
 import next from 'next';
@@ -8,10 +8,21 @@ if (!process.send || process.env.OPENCODE_BASE_URL !== 'https://profile-test.inv
 }
 globalThis.fetch = async (input, init) => {
   const request = new Request(input, init);
-  if (request.url !== `${process.env.OPENCODE_BASE_URL}/chat/completions`) throw new Error('Test egress blocked');
+  const planProbe = process.env.TEST_GATEWAY_PLANS === '1' && [
+    'https://opencode.ai/inference/go/openai/v1/chat/completions',
+    'https://opencode.ai/inference/openai/v1/chat/completions',
+  ].includes(request.url);
+  if (!planProbe && request.url !== `${process.env.OPENCODE_BASE_URL}/chat/completions`) throw new Error('Test egress blocked');
   const { messages, model, temperature } = await request.json();
+  const routingId = request.headers.get('x-opencode-session');
+  if (planProbe) {
+    if (request.headers.get('user-agent') !== 'coworkerz/1.0' || !/^ses_[a-f0-9]{32}$/.test(routingId || '')) return new Response(null, {status: 400});
+    if (!request.headers.has('authorization')) return new Response(null, {status: 401});
+    if (model.endsWith('-free')) return new Response(null, {status: 403}); // synthetic denial, not a live entitlement check
+    if (model !== 'kimi-k3') return new Response(null, {status: 404});
+  }
   const turn = messages[0].content.includes('executive-turn/v3');
-  if (turn) process.send({ type: 'turn', messages, model, temperature }); // only in-memory, synthetic inputs
+  if (turn) process.send({ type: 'turn', messages, model, temperature, routingId }); // only in-memory, synthetic inputs
   const raw = turn ? {
     dialogue: 'CEO, measure pilot onboarding hours. Compare against the baseline before committing.',
     knowledgeTopic: 'Measure The Pilot Baseline', knowledgeInsight: 'Measure before making a decision.',

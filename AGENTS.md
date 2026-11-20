@@ -13,7 +13,7 @@ Start at the symbol, not the top of every file. If this map and the checkout dis
 | Avatars, cameras, lighting, VFX | `src/components/VirtualOfficeCanvas.tsx` → `buildExecutiveAvatar`, `animate` | `src/lib/executives.ts` → `EXECUTIVES`, `ROOM_ZONES`; [art budgets](docs/art-budgets.md) |
 | Who speaks vs. what they say | `src/lib/turn-planner.ts` → `planDeliberationStep`; `src/lib/opencode.ts` → `generateExecutiveDeliberationTurn` | `src/app/api/deliberate/step/route.ts`; [turn evaluation](docs/turn-evaluation.md) |
 | Roster, stable IDs and profile settings | `src/components/CustomizeBotsDialog.tsx`, `src/app/api/executive-profiles/`, `src/lib/executive-profile-store.ts` | `requireActive(plan.speaker)` → `generateExecutiveDeliberationTurn`; [roster contract](docs/executive-roster.md); `scripts/browser/dynamic-roster.spec.ts` |
-| Model selection, API settings | `src/components/OpencodeConfigModal.tsx`, `src/app/api/opencode-config/route.ts` | `getActiveOpencodeConfig` in `src/lib/opencode-config.ts`; `tryLiveOpencodeCompletion` in `src/lib/opencode.ts` |
+| Model selection, API settings | `src/components/OpencodeConfigModal.tsx`, `src/app/api/opencode-config/route.ts` | `getActiveOpencodeConfig` in `src/lib/opencode-config.ts`; `requestChatCompletion` in `src/lib/model-gateway.ts`; [provider setup](docs/model-gateways.md) |
 | Governed documents, retrieval, graph | `src/lib/enterprise-knowledge.ts`, `src/lib/enterprise-taxonomy.ts` | `src/app/api/v1/enterprise/`, `src/components/EnterpriseKnowledgeModal.tsx` |
 | Persona, episodic recall, journals | `src/lib/memory.ts` → `persistMemoriesFor`, `runMemorySync` | `src/app/api/memory/`, `src/app/api/v1/agent-memory/route.ts`, `src/components/MemoryPanel.tsx` |
 

@@ -8,20 +8,13 @@ import {
   ekRelationships,
   knowledgeEntries,
 } from "@/db/schema";
-import { getActiveOpencodeConfig } from "@/lib/opencode-config";
+import { getActiveOpencodeConfig, publicOpencodeConfig } from "@/lib/opencode-config";
 import { asc, desc, eq } from "drizzle-orm";
 import { planDeliberationStep } from "@/lib/turn-planner";
 import { getRoster } from "@/lib/executive-profile-store";
 import { requireCeoConsole } from '../executive-profiles/access';
 
 export const dynamic = "force-dynamic";
-
-function maskKey(key: string): string {
-  if (!key || key.trim().length === 0) return "";
-  const trimmed = key.trim();
-  if (trimmed.length <= 8) return "••••••••";
-  return `${trimmed.slice(0, 4)}••••••••${trimmed.slice(-4)}`;
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -53,11 +46,6 @@ export async function GET(req: NextRequest) {
       .limit(100);
 
     const config = await getActiveOpencodeConfig();
-    const envHasApiKey = Boolean(
-      process.env.OPENCODE_API_KEY?.trim() ||
-        process.env.OPENAI_API_KEY?.trim()
-    );
-
     const roster = getRoster();
     const nextPlan = activeSession ? planDeliberationStep(roster, messages, config.walkTalkRounds, activeSession.ceoQuestion) : null;
 
@@ -94,18 +82,7 @@ export async function GET(req: NextRequest) {
       messages,
       knowledge,
       nextPlan, roster,
-      config: {
-        id: config.id,
-        baseUrl: config.baseUrl,
-        hasApiKey: Boolean(config.apiKey?.trim()) || envHasApiKey,
-        maskedApiKey: maskKey(config.apiKey),
-        envHasApiKey,
-        ctoModel: config.ctoModel,
-        cfoModel: config.cfoModel,
-        cooModel: config.cooModel,
-        temperature: config.temperature,
-        walkTalkRounds: config.walkTalkRounds,
-      },
+      config: publicOpencodeConfig(config),
       stats: {
         totalSessions: sessions.length,
         totalKnowledgeEntries: knowledge.length,

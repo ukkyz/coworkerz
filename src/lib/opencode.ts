@@ -1,3 +1,5 @@
+import { requestChatCompletion } from "./model-gateway";
+export { normalizeOpencodeModelId } from "./gateway-endpoints";
 import { ROOM_ZONES } from "./executives";
 import { profileOf, type Executive } from "./roster";
 import type { DeliberationStepPlan } from "./turn-planner";
@@ -16,13 +18,6 @@ export interface GeneratedExecutiveTurn {
   tags: string[];
   modelUsed: string;
   providerMode: "opencode-live" | "opencode-local-runtime";
-}
-
-export function normalizeOpencodeModelId(model: string): string {
-  const trimmed = model.trim();
-  return trimmed.toLowerCase().startsWith("opencode/")
-    ? trimmed.slice("opencode/".length)
-    : trimmed;
 }
 
 function clip(text: string, max: number): string {
@@ -56,67 +51,25 @@ export async function tryLiveOpencodeCompletion(params: {
   systemPrompt: string;
   userPrompt: string;
   maxTokens?: number;
+  sessionId?: number | null;
 }): Promise<string | null> {
-  if (process.env.OPENCODE_OFFLINE === '1') return null;
-  const { config, modelDisplayId, systemPrompt, userPrompt } = params;
-  const resolvedApiKey =
-    config.apiKey?.trim() ||
-    process.env.OPENCODE_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim() ||
-    "";
-  const rawModel = normalizeOpencodeModelId(modelDisplayId);
-  const isFreeModel = rawModel.endsWith("-free") || rawModel === "big-pickle";
-  const bearerToken = resolvedApiKey || (isFreeModel ? "public" : "");
-  if (!bearerToken) return null;
-
-  const candidateBases = Array.from(
-    new Set([
-      (
-        config.baseUrl?.trim() ||
-        process.env.OPENCODE_BASE_URL?.trim() ||
-        "https://opencode.ai/inference/openai/v1"
-      ).replace(/\/+$/, ""),
-      "https://opencode.ai/zen/v1",
-    ])
-  );
-  const temperature = Math.min(
-    1.2,
-    Math.max(0.1, Number.parseFloat(config.temperature || "0.65") || 0.65)
-  );
-
-  for (const base of candidateBases) {
-    try {
-      const response = await fetch(`${base}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${bearerToken}`,
-        },
-        body: JSON.stringify({
-          model: rawModel,
-          temperature,
-          max_tokens: params.maxTokens ?? 550,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-        }),
-        signal: AbortSignal.timeout(9500),
-      });
-      if (!response.ok) continue;
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const content = data?.choices?.[0]?.message?.content?.trim();
-      if (content && content.length > 15) return content;
-    } catch {
-      // Try the next OpenCode endpoint or fall back cleanly
-    }
-  }
-  return null;
+  const result = await requestChatCompletion({
+    config: params.config,
+    sessionId: params.sessionId,
+    model: params.modelDisplayId,
+    temperature: Math.min(1.2, Math.max(0.1, Number.parseFloat(params.config.temperature) || 0.65)),
+    maxTokens: params.maxTokens ?? 550,
+    timeoutMs: 45_000,
+    messages: [
+      { role: "system", content: params.systemPrompt },
+      { role: "user", content: params.userPrompt },
+    ],
+  });
+  return result.ok && result.content.length > 15 ? result.content : null;
 }
 
 export async function generateExecutiveDeliberationTurn(params: {
+  sessionId: number;
   ceoQuestion: string;
   plan: DeliberationStepPlan;
   priorMessages: ConversationMessage[];
@@ -213,6 +166,7 @@ Generate ${plan.speaker}'s spoken response to ${plan.listener} at the ${zoneInfo
 
   const liveRaw = await tryLiveOpencodeCompletion({
     config,
+    sessionId: params.sessionId,
     modelDisplayId: modelUsed,
     systemPrompt,
     userPrompt,

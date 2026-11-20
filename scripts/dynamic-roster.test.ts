@@ -29,6 +29,7 @@ test("live roster on a populated, migrated SQLite file", async (t) => {
   });
   const { db, schema: s } = await import("@/db");
   try {
+    assert.equal(db.$client.name, join(dir, "suite.sqlite"), "Fixture may write only to the disposable database");
     const old = populateLegacySuite(db, dir);
     migrate(db, { migrationsFolder: "drizzle" });
     const { getRoster, requireActive, createExecutive, archiveExecutive, saveExecutiveProfile } =
