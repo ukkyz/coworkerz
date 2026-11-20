@@ -51,7 +51,8 @@ To explore the same pilot outside the scored run, choose a target in the compose
 
 | Version | Change | Validation scope |
 | --- | --- | --- |
-| dynamic-executive-roster v1 | Records the confirmed roster, replacement, relevance routing, two-person staging and permission-preset requirements. Keeps unresolved policy choices explicit. | Prompt and repo references checked; implementation and acceptance runs are future work. |
+| executive-turn v3 / CEO persona v2 | Live identity-grounded turn; shared CEO preferences separated from private journals. Six turn keys unchanged. | [Evaluation and limitations](../docs/turn-evaluation.md); `test:roster:ui` uses a stubbed provider. |
+| dynamic-executive-roster v1 | Records the confirmed roster, replacement, relevance routing, two-person staging and permission-preset requirements. Keeps unresolved policy choices explicit. | Historical implementation brief; resolved policies and current API are in [the roster guide](../docs/executive-roster.md). |
 | nextjs-bot-customization v1 | Standalone implementation prompt with a conditional Vite migration and independent CTO/CFO/COO profile edits | Repo paths checked; UI, persistence and model checks specified for the implementing agent, not claimed as results |
 | v2 cards | Boardroom now targets file-backed SQLite; new storage card covers migrations, seed receipts and persistence tests. The v1 boardroom card describes the archived PostgreSQL implementation. Contract and turn fixture unchanged. | Offline assembly and SQLite integration tests |
 | v1 | Initial implementation contract and boardroom, scene, turn and knowledge cards; `pilot-v1` four-turn cycle plus addressed follow-up | Offline assembly tests; synthetic reference expectations. No production-model or device-quality claim. |

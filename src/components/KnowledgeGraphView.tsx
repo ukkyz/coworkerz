@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+import {principalOptions, type Executive} from "@/lib/roster";
 import type {
   ClearanceLevel,
   EkDomain,
@@ -81,8 +82,9 @@ const ENTITY_TYPES = [
 ];
 
 export default function KnowledgeGraphView({
-  onMutated,
+  roster, onMutated,
 }: {
+  roster: Executive[];
   onMutated: () => void;
 }) {
   const [data, setData] = useState<GraphPayload | null>(null);
@@ -103,12 +105,7 @@ export default function KnowledgeGraphView({
   const [entDomain, setEntDomain] = useState("technology");
   const [entDesc, setEntDesc] = useState("");
   const [entClearance, setEntClearance] = useState<ClearanceLevel>("internal");
-  const [entRoles, setEntRoles] = useState<string[]>([
-    "CEO",
-    "CTO",
-    "CFO",
-    "COO",
-  ]);
+  const [entRoles, setEntRoles] = useState<string[]>(["CEO"]);
 
   const [edgeSrc, setEdgeSrc] = useState<number>(0);
   const [edgeTgt, setEdgeTgt] = useState<number>(0);
@@ -145,7 +142,7 @@ export default function KnowledgeGraphView({
   }, [domain, includeBridges, onlyCrossDomain, asRole, activeSeed, hops, edgeSrc]);
 
   useEffect(() => {
-    loadGraph();
+    const timer = setTimeout(loadGraph, 0); return () => clearTimeout(timer);
   }, [loadGraph]);
 
   const domainMap = useMemo(() => {
@@ -254,7 +251,7 @@ export default function KnowledgeGraphView({
           targetEntityId: edgeTgt,
           predicate: edgePred,
           domainKey: edgeDomain,
-          evidence: edgeEvidence.trim(),
+          evidence: edgeEvidence.trim(), aclReadRoles: entRoles,
         }),
       });
       if (res.ok) {
@@ -421,13 +418,7 @@ export default function KnowledgeGraphView({
                 onChange={(e) => setAsRole(e.target.value as PrincipalRole)}
                 className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none"
               >
-                {(["CEO", "CFO", "CTO", "COO", "EXTERNAL_AGENT"] as PrincipalRole[]).map(
-                  (r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  )
-                )}
+                {principalOptions(roster).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
           </div>
@@ -486,15 +477,14 @@ export default function KnowledgeGraphView({
               <option value="confidential">Clearance: confidential</option>
               <option value="board_restricted">Clearance: board_restricted</option>
             </select>
+            <label className="block text-xs font-semibold">Additional permitted readers<select multiple aria-label="Graph record readers" value={entRoles.filter(r=>r!=='CEO')} onChange={e=>setEntRoles(['CEO',...Array.from(e.target.selectedOptions, o=>o.value)])} className="block w-full rounded border bg-white p-2">
+              {[...principalOptions(roster).filter(o=>o.value!=='CEO'), {value:'*',label:'All permitted readers (*)'}].map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+            </select></label>
             <div className="flex items-center justify-end gap-1.5">
               <button
                 type="button"
                 onClick={() => {
-                  setEntRoles(
-                    entClearance === "board_restricted"
-                      ? ["CEO", "CFO"]
-                      : ["CEO", "CTO", "CFO", "COO"]
-                  );
+                  setEntRoles(['CEO']);
                   setAddMode("none");
                 }}
                 className="rounded-lg px-2.5 py-1.5 text-xs text-slate-600"
@@ -569,6 +559,9 @@ export default function KnowledgeGraphView({
               placeholder="Supporting evidence / rationale..."
               className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs sm:col-span-3"
             />
+            <label className="block text-xs font-semibold">Additional permitted readers<select multiple aria-label="Graph record readers" value={entRoles.filter(r=>r!=='CEO')} onChange={e=>setEntRoles(['CEO',...Array.from(e.target.selectedOptions, o=>o.value)])} className="block w-full rounded border bg-white p-2">
+              {[...principalOptions(roster).filter(o=>o.value!=='CEO'), {value:'*',label:'All permitted readers (*)'}].map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+            </select></label>
             <div className="flex items-center justify-end gap-1.5">
               <button
                 type="button"

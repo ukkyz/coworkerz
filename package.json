@@ -11,11 +11,14 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
-    "test:db": "tsx --test scripts/sqlite.test.ts scripts/executive-profiles.test.ts",
+    "test:db": "tsx --test scripts/sqlite.test.ts scripts/executive-profiles.test.ts scripts/dynamic-roster.test.ts",
     "test": "node --test scripts/brief.test.mjs && npm run test:db",
-    "test:profiles:ui": "playwright test scripts/browser/customize-bots.spec.ts --workers=1"
+    "test:profiles:ui": "playwright test scripts/browser/customize-bots.spec.ts --workers=1",
+    "test:roster:ui": "playwright test scripts/browser --workers=1"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "5.3.0",
     "@types/js-yaml": "^4.0.9",
     "@types/three": "^0.187.0",
     "better-sqlite3": "13.2.0",
@@ -29,6 +32,7 @@
     "three": "^0.187.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@next/env": "16.4.2",
     "@playwright/test": "1.65.1",
     "@tailwindcss/postcss": "4.1.17",

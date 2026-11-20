@@ -1,15 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { getExecutiveProfiles } from "@/lib/executive-profile-store";
-import { requireCeoConsole } from "./access";
-
+import { createExecutive, rosterPayload } from "@/lib/executive-profile-store";
+import { withCeo } from "./access";
 export const dynamic = "force-dynamic";
-
-export async function GET(req: NextRequest) {
-  try {
-    const denied = await requireCeoConsole(req);
-    if (denied) return denied;
-    return NextResponse.json({ profiles: getExecutiveProfiles() }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    return NextResponse.json({ error: "Could not load executive profiles. Check the SQLite migrations." }, { status: 500 });
-  }
-}
+export const GET = (req: NextRequest) =>
+  withCeo(req, () =>
+    NextResponse.json(rosterPayload(), { headers: { "Cache-Control": "no-store" } }),
+  );
+export const POST = (req: NextRequest) =>
+  withCeo(req, async () => {
+    const executive = createExecutive(await req.json().catch(() => null));
+    return NextResponse.json({ executive, ...rosterPayload() }, { status: 201 });
+  });

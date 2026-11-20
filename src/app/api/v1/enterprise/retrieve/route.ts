@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  resolvePrincipal,
+  resolveEnterprisePrincipal,
   retrieveEnterpriseKnowledge,
 } from "@/lib/enterprise-knowledge";
 
@@ -20,11 +20,11 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveEnterprisePrincipal(req);
     if (auth.error) {
       return NextResponse.json(
         { error: auth.error },
-        { status: 401, headers: HEADERS }
+        { status: auth.status, headers: HEADERS }
       );
     }
     const q = (req.nextUrl.searchParams.get("q") || "").trim();
@@ -71,14 +71,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
-    if (auth.error) {
-      return NextResponse.json(
-        { error: auth.error },
-        { status: 401, headers: HEADERS }
-      );
-    }
-
     const body = (await req.json()) as {
       query?: string;
       domains?: string[];
@@ -91,6 +83,15 @@ export async function POST(req: NextRequest) {
       includeSeparateAgentMemory?: boolean;
       asRole?: string;
     };
+
+    if ('asRole' in body && typeof body.asRole !== 'string') return NextResponse.json({error:'Invalid simulation identity.'}, {status:400,headers:HEADERS});
+    const auth = await resolveEnterprisePrincipal(req, body.asRole);
+    if (auth.error) {
+      return NextResponse.json(
+        { error: auth.error },
+        { status: auth.status, headers: HEADERS }
+      );
+    }
 
     const query = (body.query || "").trim();
     if (query.length < 2) {

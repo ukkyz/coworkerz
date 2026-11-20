@@ -1,10 +1,9 @@
+// Legacy identity codes and art templates, not the list of active executives.
 export const EXECUTIVE_ROLES = ["CTO", "CFO", "COO"] as const;
 export type ExecutiveRole = (typeof EXECUTIVE_ROLES)[number];
 export function isExecutiveRole(value: string): value is ExecutiveRole {
   return EXECUTIVE_ROLES.some((role) => role === value);
 }
-export type ParticipantRole = "CEO" | ExecutiveRole;
-export type TargetRole = ParticipantRole | "ALL";
 
 export type RoomZoneId =
   | "ceo-briefing"

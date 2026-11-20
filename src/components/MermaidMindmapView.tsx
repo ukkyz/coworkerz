@@ -15,6 +15,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import {principalOptions, type Executive} from "@/lib/roster";
 import type { PrincipalRole } from "@/db/schema";
 
 interface MindmapSummary {
@@ -49,21 +50,13 @@ const DOMAIN_OPTIONS = [
   { key: "corporate_strategy", label: "Strategy & M&A" },
 ];
 
-const ROLES: PrincipalRole[] = [
-  "CEO",
-  "CFO",
-  "CTO",
-  "COO",
-  "EXTERNAL_AGENT",
-];
-
 let mermaidConfigured = false;
 
 export default function MermaidMindmapView({
-  refreshToken,
+  roster, refreshToken,
   onJumpTab,
 }: {
-  refreshToken: number;
+  roster: Executive[]; refreshToken: number;
   onJumpTab: (tab: "graph" | "documents" | "taxonomy" | "retrieval" | "api") => void;
 }) {
   const [domain, setDomain] = useState("ALL");
@@ -107,7 +100,7 @@ export default function MermaidMindmapView({
   }, [domain, asRole, includeCrossDomain]);
 
   useEffect(() => {
-    fetchMindmap();
+    const timer = setTimeout(fetchMindmap, 0); return () => clearTimeout(timer);
   }, [fetchMindmap, refreshToken]);
 
   useEffect(() => {
@@ -221,9 +214,9 @@ export default function MermaidMindmapView({
               onChange={(e) => setAsRole(e.target.value as PrincipalRole)}
               className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none"
             >
-              {ROLES.map((r) => (
+              {principalOptions(roster).map(({value:r,label}) => (
                 <option key={r} value={r}>
-                  {r}
+                  {label}
                 </option>
               ))}
             </select>
@@ -525,7 +518,7 @@ export default function MermaidMindmapView({
               </span>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-700">
-              Separate episodic memory service storing CTO, CFO & COO Walk &
+              Separate episodic memory service storing executive Walk &
               Talk transcripts, personal agent journals, session notes, and your
               living <code className="font-mono">CEO_PERSONA.md</code>. Blocked
               by default (<code className="font-mono">HTTP 403</code>) for

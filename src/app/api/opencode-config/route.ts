@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { opencodeConfigs } from "@/db/schema";
+import { requireCeoConsole } from "../executive-profiles/access";
+import { getRoster, requireActive, validateModel, RosterError } from "@/lib/executive-profile-store";
+import { isActive } from "@/lib/roster";
+import { executiveRoster, opencodeConfigs } from "@/db/schema";
 import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import { normalizeOpencodeModelId } from "@/lib/opencode";
 import { eq } from "drizzle-orm";
@@ -14,15 +17,18 @@ function maskKey(key: string): string {
   return `${trimmed.slice(0, 4)}••••••••${trimmed.slice(-4)}`;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const config = await getActiveOpencodeConfig();
     const envHasApiKey = Boolean(
       process.env.OPENCODE_API_KEY?.trim() ||
         process.env.OPENAI_API_KEY?.trim()
     );
     return NextResponse.json({
+      roster: getRoster(),
       config: {
+        models: Object.fromEntries(getRoster().filter(isActive).map(e => [e.id, e.model])),
         id: config.id,
         baseUrl: config.baseUrl,
         hasApiKey: Boolean(config.apiKey?.trim()) || envHasApiKey,
@@ -46,11 +52,13 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const current = await getActiveOpencodeConfig();
     const body = (await req.json()) as {
       baseUrl?: string;
       apiKey?: string;
       clearApiKey?: boolean;
+      models?: Record<string, string>;
       ctoModel?: string;
       cfoModel?: string;
       cooModel?: string;
@@ -69,20 +77,23 @@ export async function PUT(req: NextRequest) {
       Math.max(2, Number(body.walkTalkRounds || current.walkTalkRounds || 4))
     );
 
-    const [updated] = await db
-      .update(opencodeConfigs)
-      .set({
-        baseUrl: (body.baseUrl || current.baseUrl).trim(),
-        apiKey: nextApiKey,
-        ctoModel: (body.ctoModel || current.ctoModel).trim(),
-        cfoModel: (body.cfoModel || current.cfoModel).trim(),
-        cooModel: (body.cooModel || current.cooModel).trim(),
-        temperature: (body.temperature || current.temperature).trim(),
-        walkTalkRounds: rounds,
-        updatedAt: new Date(),
-      })
-      .where(eq(opencodeConfigs.id, current.id))
-      .returning();
+    const updated = db.transaction(tx => {
+      if (body.models !== undefined && (!body.models || typeof body.models !== 'object' || Array.isArray(body.models))) throw new RosterError('Expected a map of executive IDs to model IDs.');
+      const assignments = {...body.models};
+      const legacy: Partial<Pick<typeof current, 'ctoModel'|'cfoModel'|'cooModel'>> = {};
+      for (const [id, key] of [['CTO','ctoModel'],['CFO','cfoModel'],['COO','cooModel']] as const) {
+        if (body[key] !== undefined) assignments[id] ??= body[key];
+        if (assignments[id] !== undefined) legacy[key] = validateModel(assignments[id]);
+      }
+      for (const [id, value] of Object.entries(assignments)) {
+        const member = requireActive(id, tx);
+        tx.update(executiveRoster).set({model:validateModel(value)}).where(eq(executiveRoster.id, member.id)).run();
+      }
+      return tx.update(opencodeConfigs).set({
+        ...legacy, baseUrl: (body.baseUrl || current.baseUrl).trim(), apiKey: nextApiKey,
+        temperature: (body.temperature || current.temperature).trim(), walkTalkRounds: rounds, updatedAt: new Date(),
+      }).where(eq(opencodeConfigs.id,current.id)).returning().get();
+    }, {behavior:'immediate'});
 
     const envHasApiKey = Boolean(
       process.env.OPENCODE_API_KEY?.trim() ||
@@ -90,7 +101,9 @@ export async function PUT(req: NextRequest) {
     );
 
     return NextResponse.json({
+      roster: getRoster(),
       config: {
+        models: Object.fromEntries(getRoster().filter(isActive).map(e => [e.id, e.model])),
         id: updated.id,
         baseUrl: updated.baseUrl,
         hasApiKey: Boolean(updated.apiKey?.trim()) || envHasApiKey,
@@ -104,6 +117,7 @@ export async function PUT(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof RosterError) return NextResponse.json({error:error.message}, {status:error.status});
     console.error("Failed to update OpenCode config:", error);
     return NextResponse.json(
       { error: "Failed to save OpenCode configuration" },
@@ -114,6 +128,7 @@ export async function PUT(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const current = await getActiveOpencodeConfig();
     const body = (await req.json().catch(() => ({}))) as {
       baseUrl?: string;
@@ -121,6 +136,7 @@ export async function POST(req: NextRequest) {
       testModel?: string;
     };
 
+    if (process.env.OPENCODE_OFFLINE === '1') return NextResponse.json({reachable:false,mode:'opencode-local-runtime',message:'Provider egress is disabled for this instance.'});
     const baseUrl = (body.baseUrl || current.baseUrl)
       .trim()
       .replace(/\/+$/, "");

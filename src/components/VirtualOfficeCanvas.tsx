@@ -1,31 +1,27 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import {
   EXECUTIVES,
   ExecutiveProfile,
-  ExecutiveRole,
   ROOM_ZONES,
   RoomZoneId,
-  TargetRole,
 } from "@/lib/executives";
 
-import type { ExecutiveProfiles } from "@/lib/executive-profiles";
+import { accentOf, type Executive, type ExecutiveId } from "@/lib/roster";
 
 export type CameraPreset =
   | "ceo-pov"
   | "boardroom-overview"
   | "follow-huddle"
-  | "focus-CTO"
-  | "focus-CFO"
-  | "focus-COO";
+  | `focus-${ExecutiveId}`;
 
 export interface ActiveChoreography {
-  speaker: ExecutiveRole | null;
-  listener: TargetRole | null;
+  speaker: ExecutiveId | null;
+  listener: ExecutiveId | 'CEO' | null;
   roomZone: RoomZoneId;
   interactionMode:
     | "idle"
@@ -39,17 +35,15 @@ export interface ActiveChoreography {
 }
 
 interface VirtualOfficeCanvasProps {
-  profiles: ExecutiveProfiles;
+  speaker?: Executive;
+  listener?: Executive;
   choreography: ActiveChoreography;
   cameraPreset: CameraPreset;
-  selectedExecutive: ExecutiveRole | null;
-  onSelectExecutive: (role: ExecutiveRole) => void;
-  modelsByRole: Record<ExecutiveRole, string>;
+  selectedExecutive: ExecutiveId | null;
+  onSelectExecutive: (role: ExecutiveId) => void;
 }
 
 interface ArticulatedAvatar {
-  role: ExecutiveRole;
-  profile: ExecutiveProfile;
   root: THREE.Group;
   pelvis: THREE.Group;
   torso: THREE.Group;
@@ -251,7 +245,7 @@ function buildExecutiveAvatar(
   heightScale: number
 ): ArticulatedAvatar {
   const root = new THREE.Group();
-  root.userData = { executiveRole: profile.role };
+
 
   const suitMat = new THREE.MeshStandardMaterial({
     color: profile.suitColorHex,
@@ -582,17 +576,10 @@ function buildExecutiveAvatar(
     headGroup.add(bun);
   }
 
-  // Tag every child mesh so raycasting identifies this executive
-  root.traverse((obj) => {
-    obj.userData.executiveRole = profile.role;
-  });
-
   const initialPos = new THREE.Vector3(...profile.homePosition);
   root.position.copy(initialPos);
 
   return {
-    role: profile.role,
-    profile,
     root,
     pelvis,
     torso,
@@ -619,39 +606,21 @@ function buildExecutiveAvatar(
 }
 
 export default function VirtualOfficeCanvas({
-  profiles,
+  speaker, listener,
   choreography,
   cameraPreset,
   selectedExecutive,
   onSelectExecutive,
-  modelsByRole,
 }: VirtualOfficeCanvasProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const badgeRefs = useRef<Record<ExecutiveRole, HTMLButtonElement | null>>({
-    CTO: null,
-    CFO: null,
-    COO: null,
-  });
-  const statusTextRefs = useRef<Record<ExecutiveRole, HTMLSpanElement | null>>({
-    CTO: null,
-    CFO: null,
-    COO: null,
-  });
+  const badgeRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const statusTextRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const sparkRef = useRef<HTMLDivElement | null>(null);
-
-  const choreographyRef = useRef<ActiveChoreography>(choreography);
-  choreographyRef.current = choreography;
-
-  const cameraPresetRef = useRef<CameraPreset>(cameraPreset);
-  const lastAppliedPresetRef = useRef<string>("");
-  cameraPresetRef.current = cameraPreset;
-
-  const selectedExecRef = useRef<ExecutiveRole | null>(selectedExecutive);
-  selectedExecRef.current = selectedExecutive;
-
-  const onSelectExecRef = useRef(onSelectExecutive);
-  onSelectExecRef.current = onSelectExecutive;
+  const local = { choreography, cameraPreset, selectedExecutive, onSelectExecutive, speaker, listener };
+  const live = useRef(local);
+  useLayoutEffect(() => { live.current = { choreography, cameraPreset, selectedExecutive, onSelectExecutive, speaker, listener }; },
+    [choreography, cameraPreset, selectedExecutive, onSelectExecutive, speaker, listener]);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -667,12 +636,16 @@ export default function VirtualOfficeCanvas({
     const camera = new THREE.PerspectiveCamera(44, width / height, 0.1, 80);
     camera.position.set(0, 2.15, 4.95);
 
-    const renderer = new THREE.WebGLRenderer({
+    let renderer: THREE.WebGLRenderer;
+    try { renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: "high-performance",
     });
+    } catch {
+      container.textContent = "3D view unavailable. The roster, transcript and CEO controls remain available.";
+      return;
+    }
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -702,7 +675,8 @@ export default function VirtualOfficeCanvas({
     const sunLight = new THREE.DirectionalLight("#FFFDF8", 1.85);
     sunLight.position.set(-5.5, 8.2, 4.5);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.set(2048, 2048);
+    const shadowSize = window.innerWidth <= 600 ? 1024 : 2048;
+    sunLight.shadow.mapSize.set(shadowSize, shadowSize);
     sunLight.shadow.camera.near = 1;
     sunLight.shadow.camera.far = 24;
     sunLight.shadow.camera.left = -6.5;
@@ -1017,15 +991,10 @@ export default function VirtualOfficeCanvas({
       zoneDiscs[zId] = disc;
     });
 
-    // Build the 3 realistic executive bots
-    const avatars: Record<ExecutiveRole, ArticulatedAvatar> = {
-      CTO: buildExecutiveAvatar(EXECUTIVES.CTO, 0.98),
-      CFO: buildExecutiveAvatar(EXECUTIVES.CFO, 1.03),
-      COO: buildExecutiveAvatar(EXECUTIVES.COO, 0.99),
-    };
-    scene.add(avatars.CTO.root);
-    scene.add(avatars.CFO.root);
-    scene.add(avatars.COO.root);
+    // Two reusable physical rigs, independent of the number and identities of members.
+    const actors = [buildExecutiveAvatar(EXECUTIVES.CTO, 0.98), buildExecutiveAvatar(EXECUTIVES.CFO, 1.03)];
+    for (const actor of actors) { actor.root.visible = false; scene.add(actor.root); }
+    let lastPreset = '';
 
     // Dynamic luminous dialogue arc between active speaker & listener
     const arcPoints = Array.from(
@@ -1041,7 +1010,7 @@ export default function VirtualOfficeCanvas({
     const dialogueArc = new THREE.Line(arcGeo, arcMat);
     scene.add(dialogueArc);
 
-    // Click Raycasting to select CTO, CFO, or COO directly in 3D
+    // Pick only a visible rig, then resolve its current participant.
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let pointerDownPos = { x: 0, y: 0 };
@@ -1062,22 +1031,28 @@ export default function VirtualOfficeCanvas({
       pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
 
       raycaster.setFromCamera(pointer, camera);
-      const roots = [avatars.CTO.root, avatars.CFO.root, avatars.COO.root];
-      const hits = raycaster.intersectObjects(roots, true);
-      if (hits.length > 0) {
-        const hitRole = hits[0].object.userData.executiveRole as
-          | ExecutiveRole
-          | undefined;
-        if (hitRole) {
-          onSelectExecRef.current(hitRole);
-        }
-      }
+      const [hit] = raycaster.intersectObjects(actors.filter(a => a.root.visible).map(a => a.root), true);
+      if (!hit) return;
+      let root: THREE.Object3D | null = hit.object;
+      while (root && root.parent !== scene) root = root.parent;
+      const picked = actors[0].root === root ? live.current.speaker : live.current.listener;
+      if (picked) live.current.onSelectExecutive(picked.id);
     };
 
     renderer.domElement.addEventListener("pointerdown", handlePointerDown);
     renderer.domElement.addEventListener("pointerup", handlePointerUp);
 
-    // Resize observer
+    const phone = window.matchMedia('(max-width: 600px)');
+    const applyTier = () => {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, phone.matches ? 1.25 : 2));
+      backGlass.visible = !phone.matches; // no full-screen transmission pass on phones
+      tableTopGlass.material.transparent = !phone.matches;
+      tableTopGlass.material.opacity = phone.matches ? 1 : 0.62;
+      tableHolo.visible = !phone.matches;
+      actors.forEach(actor => { actor.floorRing.visible = !phone.matches; });
+    };
+    applyTier(); phone.addEventListener('change', applyTier);
+    // Observe the room itself: opening the dock can resize it without a window resize.
     const handleResize = () => {
       if (!container) return;
       const w = container.clientWidth || window.innerWidth;
@@ -1086,7 +1061,7 @@ export default function VirtualOfficeCanvas({
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
-    window.addEventListener("resize", handleResize);
+    const observer = new ResizeObserver(handleResize); observer.observe(container);
 
     // Smooth camera preset target vectors
     const desiredCamPos = new THREE.Vector3(0, 2.15, 4.95);
@@ -1101,15 +1076,16 @@ export default function VirtualOfficeCanvas({
       animFrameId = requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05);
       const elapsed = clock.elapsedTime;
-      const choreo = choreographyRef.current;
+      const { choreography: choreo, speaker, listener, selectedExecutive, cameraPreset: activePreset } = live.current;
 
       // Highlight active collaboration zone ring
       (Object.keys(zoneDiscs) as RoomZoneId[]).forEach((zId) => {
+        zoneDiscs[zId].visible = !phone.matches || (!!speaker && choreo.roomZone === zId && choreo.interactionMode !== "idle");
         const mat = zoneDiscs[zId].material as THREE.MeshBasicMaterial;
         if (choreo.interactionMode !== "idle" && choreo.roomZone === zId) {
           mat.color.set(
             choreo.speaker
-              ? EXECUTIVES[choreo.speaker].accentHex
+              ? accentOf(choreo.speaker)
               : "#2563EB"
           );
           mat.opacity = 0.55 + Math.sin(elapsed * 4) * 0.15;
@@ -1119,87 +1095,16 @@ export default function VirtualOfficeCanvas({
         }
       });
 
-      // Assign spatial target slots for CTO, CFO, COO based on active choreography
-      const zone = ROOM_ZONES[choreo.roomZone] || ROOM_ZONES["strategy-table"];
-      const allRoles: ExecutiveRole[] = ["CTO", "CFO", "COO"];
-
-      if (choreo.interactionMode === "idle" || !choreo.speaker) {
-        allRoles.forEach((r) => {
-          avatars[r].targetPos.set(...EXECUTIVES[r].homePosition);
-          avatars[r].lookTarget.set(0, 1.55, 4.2);
-        });
-      } else if (
-        choreo.interactionMode === "executive_consensus" &&
-        ROOM_ZONES["ceo-briefing"].consensusSlots
-      ) {
-        const slots = ROOM_ZONES["ceo-briefing"].consensusSlots!;
-        allRoles.forEach((r) => {
-          avatars[r].targetPos.set(...slots[r]);
-          avatars[r].lookTarget.set(0, 1.65, 4.8);
-        });
-      } else if (choreo.interactionMode === "ceo_response") {
-        // Responding executive steps forward to answer the CEO directly; peers flank and listen
-        const responder = choreo.speaker;
-        const flankSlots: Array<[number, number, number]> = [
-          [-1.35, 0, 0.8],
-          [1.35, 0, 0.8],
-        ];
-        avatars[responder].targetPos.set(0, 0, 1.55);
-        avatars[responder].lookTarget.set(0, 1.65, 4.8);
-        allRoles
-          .filter((r) => r !== responder)
-          .forEach((r, idx) => {
-            avatars[r].targetPos.set(...flankSlots[idx]);
-            avatars[r].lookTarget.copy(avatars[responder].currentPos);
-            avatars[r].lookTarget.y = 1.55;
-          });
-      } else {
-        const speaker = choreo.speaker;
-        const listenerExec: ExecutiveRole =
-          choreo.listener &&
-          choreo.listener !== "CEO" &&
-          choreo.listener !== "ALL"
-            ? (choreo.listener as ExecutiveRole)
-            : allRoles.find((r) => r !== speaker) || "CFO";
-        const observerExec: ExecutiveRole =
-          allRoles.find((r) => r !== speaker && r !== listenerExec) || "COO";
-
-        // Subtle Walk-and-Talk pacing sway when at window-lounge promenade
-        const promenadeOffset =
-          choreo.roomZone === "window-lounge"
-            ? Math.sin(elapsed * 0.65) * 0.55
-            : 0;
-
-        avatars[speaker].targetPos.set(
-          zone.speakerSlot[0] + promenadeOffset,
-          0,
-          zone.speakerSlot[2]
-        );
-        avatars[listenerExec].targetPos.set(
-          zone.listenerSlot[0] + promenadeOffset,
-          0,
-          zone.listenerSlot[2]
-        );
-        avatars[observerExec].targetPos.set(
-          zone.observerSlot[0],
-          0,
-          zone.observerSlot[2]
-        );
-
-        // Face each other naturally during Walk-and-Talk!
-        avatars[speaker].lookTarget.copy(avatars[listenerExec].currentPos);
-        avatars[speaker].lookTarget.y = 1.55;
-
-        avatars[listenerExec].lookTarget.copy(avatars[speaker].currentPos);
-        avatars[listenerExec].lookTarget.y = 1.55;
-
-        avatars[observerExec].lookTarget.copy(avatars[speaker].currentPos);
-        avatars[observerExec].lookTarget.y = 1.55;
-      }
-
-      // Update each executive avatar's locomotion, gaze, breathing & speaking gestures
-      allRoles.forEach((role) => {
-        const av = avatars[role];
+      const zone = ROOM_ZONES[choreo.roomZone];
+      actors.forEach((av, index) => {
+        const member = index === 0 ? speaker : listener;
+        av.root.visible = !!member;
+        if (!member) return;
+        const role = member.id;
+        av.targetPos.set(...(index === 0 ? zone.speakerSlot : zone.listenerSlot));
+        if (listener) av.lookTarget.copy(actors[1-index].currentPos);
+        else av.lookTarget.set(0, 1.55, 4.8); // the human CEO
+        av.lookTarget.y = 1.55;
         const steerGoal = computeNextSteerPoint(av.currentPos, av.targetPos);
         const dx = steerGoal.x - av.currentPos.x;
         const dz = steerGoal.z - av.currentPos.z;
@@ -1313,7 +1218,7 @@ export default function VirtualOfficeCanvas({
           av.floorRing.scale.setScalar(1.08 + Math.sin(elapsed * 5) * 0.06);
         } else {
           av.mouth.scale.y = 1;
-          const isSelected = selectedExecRef.current === role;
+          const isSelected = selectedExecutive === role;
           av.ringMaterial.opacity = isSelected
             ? 0.65
             : av.isWalking
@@ -1327,14 +1232,10 @@ export default function VirtualOfficeCanvas({
       });
 
       // Update floor connection arc between active speaker & listener
-      if (
-        choreo.speaker &&
-        choreo.listener &&
-        choreo.listener !== "CEO" &&
-        choreo.listener !== "ALL"
-      ) {
-        const spPos = avatars[choreo.speaker].currentPos;
-        const liPos = avatars[choreo.listener as ExecutiveRole].currentPos;
+      dialogueArc.visible = !phone.matches && !!speaker && !!listener;
+      if (dialogueArc.visible && speaker && listener) {
+        const spPos = actors[0].currentPos;
+        const liPos = actors[1].currentPos;
         const posAttr = dialogueArc.geometry.attributes
           .position as THREE.BufferAttribute;
         for (let i = 0; i < 28; i++) {
@@ -1345,20 +1246,20 @@ export default function VirtualOfficeCanvas({
           posAttr.setXYZ(i, x, archY, z);
         }
         posAttr.needsUpdate = true;
-        arcMat.color.set(EXECUTIVES[choreo.speaker].accentHex);
+        arcMat.color.set(accentOf(speaker.id));
         arcMat.opacity = 0.65;
       } else {
         arcMat.opacity = 0;
       }
 
       // Camera Preset Transitions
-      const presetKey = `${cameraPresetRef.current}-${choreo.roomZone}-${choreo.speaker || "none"}`;
-      if (presetKey !== lastAppliedPresetRef.current) {
-        lastAppliedPresetRef.current = presetKey;
+      const presetKey = `${activePreset}-${choreo.roomZone}-${choreo.speaker || "none"}`;
+      if (presetKey !== lastPreset) {
+        lastPreset = presetKey;
         cameraTransitionFrames = 55;
       }
 
-      const activePreset = cameraPresetRef.current;
+
       if (activePreset === "ceo-pov") {
         desiredCamPos.set(0, 2.05, 4.85);
         desiredCamTarget.set(0, 1.3, -0.95);
@@ -1370,8 +1271,9 @@ export default function VirtualOfficeCanvas({
         desiredCamPos.set(zCenter[0] * 0.55, 2.15, zCenter[2] + 3.85);
         desiredCamTarget.set(zCenter[0], 1.32, zCenter[2]);
       } else if (activePreset.startsWith("focus-")) {
-        const focusRole = activePreset.replace("focus-", "") as ExecutiveRole;
-        const focusAv = avatars[focusRole];
+        const focusId = activePreset.slice('focus-'.length);
+        const focusAv = focusId === speaker?.id ? actors[0] : focusId === listener?.id ? actors[1] : null;
+        if (focusAv) {
         desiredCamPos.set(
           focusAv.currentPos.x * 0.75,
           1.92,
@@ -1382,6 +1284,7 @@ export default function VirtualOfficeCanvas({
           1.38,
           focusAv.currentPos.z
         );
+        } else { desiredCamPos.set(3.85, 3.35, 5.15); desiredCamTarget.set(0, 1.05, -1.15); }
       }
 
       if (
@@ -1402,10 +1305,11 @@ export default function VirtualOfficeCanvas({
       const cw = container.clientWidth || width;
       const ch = container.clientHeight || height;
 
-      allRoles.forEach((role) => {
-        const av = avatars[role];
-        const badgeEl = badgeRefs.current[role];
-        const statusEl = statusTextRefs.current[role];
+      actors.forEach((av, index) => {
+        const role = (index === 0 ? speaker : listener)?.id;
+        if (!role) return;
+        const badgeEl = badgeRefs.current[index];
+        const statusEl = statusTextRefs.current[index];
         if (badgeEl) {
           tempVec.set(
             av.currentPos.x,
@@ -1416,7 +1320,7 @@ export default function VirtualOfficeCanvas({
           const x = (tempVec.x * 0.5 + 0.5) * cw;
           const y = (-tempVec.y * 0.5 + 0.5) * ch;
           const visible = tempVec.z < 1 && x > -80 && x < cw + 80;
-          badgeEl.style.opacity = visible ? "1" : "0";
+          badgeEl.style.visibility = visible ? "visible" : "hidden";
           badgeEl.style.transform = `translate3d(${Math.round(
             x
           )}px, ${Math.round(y)}px, 0) translate(-50%, -100%)`;
@@ -1429,9 +1333,9 @@ export default function VirtualOfficeCanvas({
             statusEl.textContent =
               choreo.listener === "CEO"
                 ? "Briefing CEO"
-                : `Talking to ${choreo.listener}`;
+                : `Talking to ${listener?.roleName}`;
           } else if (choreo.listener === role && choreo.speechText) {
-            statusEl.textContent = `Listening to ${choreo.speaker}`;
+            statusEl.textContent = `Listening to ${speaker?.roleName}`;
           } else {
             statusEl.textContent = "Standing Ready";
           }
@@ -1441,8 +1345,8 @@ export default function VirtualOfficeCanvas({
       // Project live speech bubble above active speaker
       const bubbleEl = bubbleRef.current;
       if (bubbleEl) {
-        if (choreo.speaker && choreo.speechText) {
-          const spAv = avatars[choreo.speaker];
+        if (speaker && choreo.speechText) {
+          const spAv = actors[0];
           tempVec.set(
             spAv.currentPos.x,
             2.18 * spAv.heightScale,
@@ -1466,8 +1370,8 @@ export default function VirtualOfficeCanvas({
       // Project floating knowledge enrichment indicator
       const sparkEl = sparkRef.current;
       if (sparkEl) {
-        if (choreo.speaker && choreo.latestInsightTopic) {
-          const spAv = avatars[choreo.speaker];
+        if (speaker && choreo.latestInsightTopic) {
+          const spAv = actors[0];
           tempVec.set(spAv.currentPos.x, 1.25, spAv.currentPos.z);
           tempVec.project(camera);
           const sx = Math.min(
@@ -1486,7 +1390,7 @@ export default function VirtualOfficeCanvas({
 
     return () => {
       cancelAnimationFrame(animFrameId);
-      window.removeEventListener("resize", handleResize);
+      observer.disconnect(); phone.removeEventListener('change', applyTier);
       renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       controls.dispose();
@@ -1497,16 +1401,20 @@ export default function VirtualOfficeCanvas({
       walnutTex.dispose();
       ctoScreenTex.dispose();
       cfoScreenTex.dispose();
-      renderer.dispose();
+      const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
+      scene.traverse(obj => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
+          geometries.add(obj.geometry);
+          for (const m of Array.isArray(obj.material) ? obj.material : [obj.material]) materials.add(m);
+        }
+      });
+      geometries.forEach(g=>g.dispose()); materials.forEach(m=>m.dispose());
+      sunLight.shadow.dispose(); renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
     };
   }, []);
-
-  const activeSpeakerProfile = choreography.speaker
-    ? EXECUTIVES[choreography.speaker]
-    : null;
 
   return (
     <div className="relative h-full w-full overflow-hidden select-none">
@@ -1514,22 +1422,14 @@ export default function VirtualOfficeCanvas({
       <div ref={mountRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
 
       {/* Projected 3D Executive Nameplates */}
-      {(["CTO", "CFO", "COO"] as ExecutiveRole[]).map((role) => {
-        const profile = EXECUTIVES[role];
-        const isSelected = selectedExecutive === role;
-        const isSpeaking =
-          choreography.speaker === role && Boolean(choreography.speechText);
-        const shortModel = (modelsByRole[role] || profile.defaultModel)
-          .replace(/^opencode\//i, "")
-          .slice(0, 22);
-
+      {[speaker, listener].map((member, index) => {
+        if (!member) return null;
+        const role = member.id, isSelected = selectedExecutive === role;
+        const isSpeaking = index === 0 && !!choreography.speechText;
+        const shortModel = member.model.replace(/^opencode\//i, '').slice(0, 22);
         return (
-          <button type="button" aria-label={`View ${profiles[role].displayName}, ${profiles[role].job} (${role})`}
-            key={role}
-            ref={(el) => {
-              badgeRefs.current[role] = el;
-            }}
-            onClick={() => onSelectExecutive(role)}
+          <button type="button" aria-label={`View ${member.displayName}, ${member.job} (${member.roleName})`}
+            data-onstage={role} key={role} ref={el => { badgeRefs.current[index] = el; }} onClick={() => onSelectExecutive(role)}
             style={{ willChange: "transform, opacity", left: 0, top: 0 }}
             className={`pointer-events-auto absolute z-10 cursor-pointer rounded-xl border px-2.5 py-1.5 backdrop-blur-md transition-shadow duration-200 ${
               isSpeaking
@@ -1542,23 +1442,23 @@ export default function VirtualOfficeCanvas({
             <span className="flex items-center gap-1.5 whitespace-nowrap">
               <span
                 className="inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: profile.accentHex }}
+                style={{ backgroundColor: accentOf(role) }}
               />
               <span
-                className="text-[11px] font-bold tracking-wide uppercase"
-                style={{ color: profile.accentHex }}
+                className="max-w-32 truncate text-[11px] font-bold tracking-wide uppercase"
+                style={{ color: accentOf(role) }}
               >
-                {role}
+                {member.roleName}
               </span>
               <span className="max-w-36 truncate text-xs font-semibold text-slate-900">
-                {profiles[role].displayName}
+                {member.displayName}
               </span>
             </span>
-            <span className="block max-w-48 truncate text-left text-[10px] text-slate-600">{profiles[role].job}</span>
+            <span className="block max-w-48 truncate text-left text-[10px] text-slate-600">{member.job}</span>
             <span className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-500">
               <span
                 ref={(el) => {
-                  statusTextRefs.current[role] = el;
+                  statusTextRefs.current[index] = el;
                 }}
                 className="font-medium text-slate-600"
               >
@@ -1580,22 +1480,22 @@ export default function VirtualOfficeCanvas({
           left: 0,
           top: 0,
           opacity: 0,
-          borderColor: activeSpeakerProfile?.accentHex || "#CBD5E1",
+          borderColor: speaker ? accentOf(speaker.id) : "#CBD5E1",
         }}
         className="pointer-events-none absolute z-20 w-[340px] max-w-[86vw] rounded-2xl border-2 bg-white/95 p-3.5 shadow-xl backdrop-blur-md transition-opacity duration-200"
       >
-        {activeSpeakerProfile && choreography.speechText && (
+        {speaker && choreography.speechText && (
           <>
             <div className="mb-1 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
                 <span
                   className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white"
-                  style={{ backgroundColor: activeSpeakerProfile.accentHex }}
+                  style={{ backgroundColor: accentOf(speaker.id) }}
                 >
-                  {activeSpeakerProfile.role} → {choreography.listener || "ALL"}
+                  {speaker.roleName} → {listener?.roleName || "CEO"}
                 </span>
                 <span className="max-w-32 truncate text-xs font-semibold text-slate-800">
-                  {profiles[activeSpeakerProfile.role].displayName}
+                  {speaker.displayName}
                 </span>
               </div>
               <span className="text-[10px] font-medium text-slate-400">
@@ -1618,10 +1518,10 @@ export default function VirtualOfficeCanvas({
           top: 0,
         }}
         className={`pointer-events-none absolute z-20 transition-opacity duration-300 ${
-          choreography.latestInsightTopic ? "opacity-100" : "opacity-0"
+          speaker && choreography.latestInsightTopic ? "opacity-100" : "opacity-0"
         }`}
       >
-        {choreography.latestInsightTopic && (
+        {speaker && choreography.latestInsightTopic && (
           <div className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-950/90 px-3 py-1 text-[11px] font-medium text-blue-50 shadow-lg backdrop-blur">
             <span className="inline-block h-2 w-2 animate-ping rounded-full bg-emerald-400" />
             <span>DB Enriched:</span>

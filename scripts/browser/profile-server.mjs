@@ -10,7 +10,7 @@ globalThis.fetch = async (input, init) => {
   const request = new Request(input, init);
   if (request.url !== `${process.env.OPENCODE_BASE_URL}/chat/completions`) throw new Error('Test egress blocked');
   const { messages, model, temperature } = await request.json();
-  const turn = messages[0].content.includes('executive-turn/v2');
+  const turn = messages[0].content.includes('executive-turn/v3');
   if (turn) process.send({ type: 'turn', messages, model, temperature }); // only in-memory, synthetic inputs
   const raw = turn ? {
     dialogue: 'CEO, measure pilot onboarding hours. Compare against the baseline before committing.',

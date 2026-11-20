@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
-import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { ExecutiveRole } from "../lib/executives";
+
+import type { ExecutiveId, PermissionPreset } from "../lib/roster";
 
 // Store UTC epoch milliseconds; Drizzle maps them to Date on reads and writes.
 const now = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
@@ -13,7 +15,7 @@ export const seedRuns = sqliteTable("seed_runs", {
 export const deliberationSessions = sqliteTable("deliberation_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   ceoQuestion: text("ceo_question").notNull(),
-  status: text("status").notNull().default("active"), // 'active' | 'deliberating' | 'completed'
+  status: text("status").notNull().default("active"), // 'active' | 'deliberating' | 'completed' | 'paused'
   autoWalkAndTalk: integer("auto_walk_and_talk", { mode: "boolean" }).notNull().default(true),
   turnCount: integer("turn_count").notNull().default(0),
   executiveSummary: text("executive_summary"),
@@ -26,8 +28,8 @@ export const conversationMessages = sqliteTable("conversation_messages", {
   sessionId: integer("session_id")
     .notNull()
     .references(() => deliberationSessions.id, { onDelete: "cascade" }),
-  senderRole: text("sender_role").notNull(), // 'CEO' | 'CTO' | 'CFO' | 'COO'
-  targetRole: text("target_role").notNull().default("ALL"), // 'ALL' | 'CEO' | 'CTO' | 'CFO' | 'COO'
+  senderRole: text("sender_role").notNull(), // CEO or stable executive ID
+  targetRole: text("target_role").notNull().default("ALL"), // ALL, CEO or stable executive ID
   interactionMode: text("interaction_mode").notNull().default("walk_and_talk"), // 'ceo_directive' | 'walk_and_talk' | 'executive_consensus'
   roomZone: text("room_zone").notNull().default("strategy-table"), // 'ceo-briefing' | 'strategy-table' | 'tech-wall' | 'finance-desk' | 'window-lounge'
   content: text("content").notNull(),
@@ -45,8 +47,8 @@ export const knowledgeEntries = sqliteTable("knowledge_entries", {
     () => conversationMessages.id,
     { onDelete: "set null" }
   ),
-  contributorRole: text("contributor_role").notNull(), // 'CTO' | 'CFO' | 'COO' | 'JOINT'
-  collaboratorRole: text("collaborator_role"), // 'CTO' | 'CFO' | 'COO' | 'ALL'
+  contributorRole: text("contributor_role").notNull(), // executive ID or JOINT
+  collaboratorRole: text("collaborator_role"), // recipient ID or broadcast
   topic: text("topic").notNull(),
   insight: text("insight").notNull(),
   category: text("category").notNull().default("cross-functional"), // 'architecture' | 'finance' | 'operations' | 'cross-functional'
@@ -56,13 +58,28 @@ export const knowledgeEntries = sqliteTable("knowledge_entries", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).default(now).notNull(),
 });
 
-// Only overrides live here. The role (never a display name) identifies the slot.
+// Legacy migration input. After 0002 the roster owns all effective profile settings.
 export const executiveProfileOverrides = sqliteTable("executive_profile_overrides", {
   role: text("role").$type<ExecutiveRole>().primaryKey().notNull(),
   displayName: text("display_name").notNull(),
   job: text("job").notNull(),
   skillPrompt: text("skill_prompt").notNull(),
 }, (table) => [check("executive_profile_role", sql`${table.role} IN ('CTO', 'CFO', 'COO')`)]);
+
+// Old message/ACL role columns already store text. Keep the original identities in place.
+export const executiveRoster = sqliteTable("executive_roster", {
+  sequence: integer("sequence").primaryKey({ autoIncrement: true }),
+  id: text("executive_id").$type<ExecutiveId>().notNull().unique(),
+  roleName: text("role_name").notNull(),
+  titleKey: text("title_key").notNull(),
+  displayName: text("display_name").notNull(),
+  job: text("job").notNull(),
+  skillPrompt: text("skill_prompt").notNull(),
+  model: text("model").notNull(),
+  preset: text("preset").$type<PermissionPreset>().notNull(),
+  joinedAfter: integer("joined_after_message").notNull().default(0),
+  retiredAfter: integer("retired_after_message"),
+}, t => [uniqueIndex("active_executive_title").on(t.titleKey).where(sql`${t.retiredAfter} is null`)]);
 
 export const opencodeConfigs = sqliteTable("opencode_configs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -103,7 +120,7 @@ export interface CeoPersonaProfile {
   styleHint: string;
   strategicPriorities: Array<{ theme: string; mentions: number }>;
   recurringThemes: string[];
-  executiveObservations: Record<"CTO" | "CFO" | "COO", string[]>;
+  executiveObservations: Record<string, string[]>;
   recentDirectives: Array<{
     sessionId: number;
     content: string;
@@ -178,12 +195,7 @@ export type ClearanceLevel =
   | "confidential"
   | "board_restricted";
 
-export type PrincipalRole =
-  | "CEO"
-  | "CTO"
-  | "CFO"
-  | "COO"
-  | "EXTERNAL_AGENT";
+export type PrincipalRole = "CEO" | ExecutiveId | "EXTERNAL_AGENT";
 
 export interface SkosConcept {
   id: string; // e.g. "tech:sovereign-ai-infra"

@@ -1,3 +1,4 @@
+import { requireCeoConsole } from "@/app/api/executive-profiles/access";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { personaRevisions } from "@/db/schema";
@@ -49,8 +50,9 @@ async function buildMemoryPayload() {
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     return NextResponse.json(await buildMemoryPayload());
   } catch (error) {
     console.error("Failed to load memory:", error);
@@ -60,6 +62,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const body = (await req.json().catch(() => ({}))) as { action?: string };
     if (body.action === "rebuild") {
       await rebuildAllMemory();

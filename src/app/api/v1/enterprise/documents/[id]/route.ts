@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { ekDocuments, type ClearanceLevel } from "@/db/schema";
 import {
   canPrincipalRead,
-  resolvePrincipal,
+  resolveEnterprisePrincipal,
   reviewEnterpriseDocument,
 } from "@/lib/enterprise-knowledge";
 
@@ -27,11 +27,11 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveEnterprisePrincipal(req);
     if (auth.error) {
       return NextResponse.json(
         { error: auth.error },
-        { status: 401, headers: HEADERS }
+        { status: auth.status, headers: HEADERS }
       );
     }
     const { id } = await context.params;
@@ -83,11 +83,11 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveEnterprisePrincipal(req);
     if (auth.error) {
       return NextResponse.json(
         { error: auth.error },
-        { status: 401, headers: HEADERS }
+        { status: auth.status, headers: HEADERS }
       );
     }
     if (!auth.principal.canWrite) {
@@ -153,11 +153,11 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveEnterprisePrincipal(req);
     if (auth.error) {
       return NextResponse.json(
         { error: auth.error },
-        { status: 401, headers: HEADERS }
+        { status: auth.status, headers: HEADERS }
       );
     }
     if (auth.principal.role !== "CEO" || !auth.principal.canWrite) {

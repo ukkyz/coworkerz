@@ -73,7 +73,12 @@ test("SQLite setup and application integration", async (t) => {
 
       await t.test("memory statistics, mirrors and scoped enterprise retrieval use SQLite", async () => {
         const memory = await import("@/lib/memory");
+        // Add a fourth executive before the first-ever memory backfill on this legacy transcript.
+        const {createExecutive, archiveExecutive} = await import('@/lib/executive-profile-store');
+        const late = createExecutive({roleName:'Late Joiner',displayName:'Jo',job:'Pilot editor',skillPrompt:'Check the baseline.',model:'suite-test',preset:'none'});
         await memory.ensureMemoryBackfill();
+        assert.equal(db.select().from(s.executiveMemories).where(eq(s.executiveMemories.executiveRole,late.id)).all().length,0);
+        archiveExecutive(late.id);
         const stats = await memory.getMemoryStats();
         assert.deepEqual([stats.totalMessages, stats.ceoMessages, stats.botToBot, stats.botToCeo], [5, 1, 3, 1]);
         assert.ok(stats.memoriesByRole.CFO > 0);

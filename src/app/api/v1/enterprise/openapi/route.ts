@@ -144,7 +144,7 @@ export async function GET(req: NextRequest) {
               type: "array",
               items: {
                 type: "string",
-                enum: ["CEO", "CTO", "CFO", "COO", "EXTERNAL_AGENT"],
+                description: "Executive ID from the live roster, CEO, EXTERNAL_AGENT, or * (still clearance-limited).",
               },
             },
           },

@@ -1,3 +1,5 @@
+import { requireActive, RosterError } from "@/lib/executive-profile-store";
+import { requireCeoConsole } from "@/app/api/executive-profiles/access";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { knowledgeEntries } from "@/db/schema";
@@ -7,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const roleFilter = req.nextUrl.searchParams.get("role");
     const q = (req.nextUrl.searchParams.get("q") || "").trim().toLowerCase();
 
@@ -41,6 +44,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const body = (await req.json()) as {
       contributorRole?: string;
       topic?: string;
@@ -58,7 +62,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const [created] = await db
+    if (body.contributorRole && body.contributorRole !== "JOINT") requireActive(body.contributorRole);
+    const created = db
       .insert(knowledgeEntries)
       .values({
         contributorRole: body.contributorRole || "JOINT",
@@ -72,10 +77,11 @@ export async function POST(req: NextRequest) {
           : ["ceo-mandate", "institutional-memory"],
         appliedCount: 0,
       })
-      .returning();
+      .returning().get();
 
     return NextResponse.json({ knowledgeEntry: created });
   } catch (error) {
+    if (error instanceof RosterError) return NextResponse.json({error:error.message}, {status:error.status});
     console.error("Failed to add knowledge entry:", error);
     return NextResponse.json(
       { error: "Failed to save knowledge entry" },
@@ -86,6 +92,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const id = Number(req.nextUrl.searchParams.get("id"));
     if (!id) {
       return NextResponse.json({ error: "Valid id required" }, { status: 400 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { RosterError } from "@/lib/executive-profile-store";
 import type { ClearanceLevel, PrincipalRole } from "@/db/schema";
 import {
   createEnterpriseApiKey,
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(minted, { status: 201 });
   } catch (error) {
+    if (error instanceof RosterError) return NextResponse.json({error: error.message}, {status: error.status});
     console.error("POST /api/v1/enterprise/api-keys failed:", error);
     return NextResponse.json(
       { error: "Failed to mint API key" },

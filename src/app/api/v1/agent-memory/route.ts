@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getMember } from "@/lib/executive-profile-store";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { executiveMemories } from "@/db/schema";
@@ -24,7 +25,7 @@ export async function OPTIONS() {
 }
 
 /**
- * Strictly separate REST service for Conversational Agent Memory (CTO/CFO/COO episodic
+ * Strictly separate REST service for Conversational Agent Memory (identity-owned episodic
  * memories + CEO_PERSONA.md). API keys scoped solely to Enterprise Knowledge receive 403.
  */
 export async function GET(req: NextRequest) {
@@ -49,9 +50,9 @@ export async function GET(req: NextRequest) {
     }
 
     await ensureMemoryBackfill();
-    const roleFilter = (req.nextUrl.searchParams.get("executive") || "")
-      .trim()
-      .toUpperCase();
+    const filter = req.nextUrl.searchParams.get("executive")?.trim();
+    const member = filter ? getMember(filter.startsWith('exec-') ? filter : filter.toUpperCase()) : undefined;
+    if (req.nextUrl.searchParams.has('executive') && !member) return NextResponse.json({error: "Unknown executive identity."}, {status: 404, headers: HEADERS});
     const limit = Math.min(
       50,
       Math.max(1, Number(req.nextUrl.searchParams.get("limit") || 15))
@@ -60,11 +61,11 @@ export async function GET(req: NextRequest) {
     const [persona, stats, mems] = await Promise.all([
       getOrCreatePersona(),
       getMemoryStats(),
-      roleFilter === "CTO" || roleFilter === "CFO" || roleFilter === "COO"
+      member
         ? db
             .select()
             .from(executiveMemories)
-            .where(eq(executiveMemories.executiveRole, roleFilter))
+            .where(eq(executiveMemories.executiveRole, member.id))
             .orderBy(desc(executiveMemories.id))
             .limit(limit)
         : db

@@ -1,3 +1,4 @@
+import { requireCeoConsole } from "@/app/api/executive-profiles/access";
 import { NextRequest, NextResponse } from "next/server";
 import { getMemoryFileContent } from "@/lib/memory";
 
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic";
 /** Serves a memory markdown file (regenerated fresh from SQLite, mirrored to memory/ on disk). */
 export async function GET(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const rel = req.nextUrl.searchParams.get("path") || "CEO_PERSONA.md";
     const download = req.nextUrl.searchParams.get("download") === "1";
     const content = await getMemoryFileContent(rel);
