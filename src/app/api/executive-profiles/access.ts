@@ -1,3 +1,4 @@
+import { RosterError } from "@/lib/executive-profile-store";
 import { type NextRequest, NextResponse } from "next/server";
 import { resolvePrincipal } from "@/lib/enterprise-knowledge";
 
@@ -7,6 +8,25 @@ export async function requireCeoConsole(req: NextRequest) {
   const { principal, error } = await resolvePrincipal(req);
   if (error) return NextResponse.json({ error }, { status: 401 });
   if (principal.authType !== "ceo-session") {
-    return NextResponse.json({ error: "Executive profiles are CEO console settings." }, { status: 403 });
+    return NextResponse.json(
+      { error: "This action requires the trusted CEO console." },
+      { status: 403 },
+    );
+  }
+}
+
+export async function withCeo(req: NextRequest, action: () => Response | Promise<Response>) {
+  try {
+    return (await requireCeoConsole(req)) ?? (await action());
+  } catch (error) {
+    if (error instanceof RosterError)
+      return NextResponse.json(
+        { error: error.message, field: error.field },
+        { status: error.status },
+      );
+    return NextResponse.json(
+      { error: "Could not access the executive roster. Check the database migrations." },
+      { status: 500 },
+    );
   }
 }

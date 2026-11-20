@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -29,46 +29,31 @@ import {
   VolumeX,
   Footprints,
   UserRound,
-  CornerDownRight,
   Layers,
   GitBranch,
   ArrowUpRight,
 } from "lucide-react";
 import CustomizeBotsDialog from "./CustomizeBotsDialog";
-import { DEFAULT_PROFILES, type ExecutiveProfiles } from "@/lib/executive-profiles";
+import dynamic from 'next/dynamic';
+import { isActive, isExecutiveId, accentOf, type Executive, type ExecutiveId } from '@/lib/roster';
+import type { DeliberationStepPlan as StepPlanPreview } from '@/lib/turn-planner';
 import MemoryPanel from "./MemoryPanel";
-import EnterpriseKnowledgeModal, {
-  KnowledgeOsTab,
-} from "./EnterpriseKnowledgeModal";
-import VirtualOfficeCanvas, {
-  ActiveChoreography,
-  CameraPreset,
-} from "./VirtualOfficeCanvas";
-import OpencodeConfigModal, {
-  ClientOpencodeConfig,
-} from "./OpencodeConfigModal";
+import type { KnowledgeOsTab } from './EnterpriseKnowledgeModal';
+import type { ActiveChoreography, CameraPreset } from './VirtualOfficeCanvas';
+import type { ClientOpencodeConfig } from './OpencodeConfigModal';
+const EnterpriseKnowledgeModal = dynamic(() => import('./EnterpriseKnowledgeModal'));
+const VirtualOfficeCanvas = dynamic(() => import('./VirtualOfficeCanvas'), {ssr: false});
+const OpencodeConfigModal = dynamic(() => import('./OpencodeConfigModal'));
 import {
   CEO_SAMPLE_DIRECTIVES,
-  EXECUTIVES,
-  ExecutiveRole,
   ROOM_ZONES,
   RoomZoneId,
-  TargetRole,
 } from "@/lib/executives";
 import type {
   ConversationMessage,
   DeliberationSession,
   KnowledgeEntry,
 } from "@/db/schema";
-
-interface StepPlanPreview {
-  stepIndex: number;
-  speaker: ExecutiveRole;
-  listener: TargetRole;
-  interactionMode: "walk_and_talk" | "executive_consensus" | "ceo_response";
-  roomZone: RoomZoneId;
-  stageLabel: string;
-}
 
 interface BoardroomStats {
   totalSessions: number;
@@ -78,10 +63,14 @@ interface BoardroomStats {
 }
 
 type DockTab = "transcript" | "knowledge" | "memory" | "history";
-type ComposeTarget = "NEW" | "ALL" | ExecutiveRole;
+type ComposeTarget = "NEW" | "ALL" | ExecutiveId;
 
-export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProfiles: ExecutiveProfiles }) {
-  const [profiles, setProfiles] = useState(initialProfiles);
+export default function ExecutiveBoardroomApp({ initialRoster }: { initialRoster: Executive[] }) {
+  const [roster, setRoster] = useState(initialRoster);
+  const active = useMemo(() => roster.filter(isActive), [roster]);
+  const byId = useMemo(() => new Map<string, Executive>(roster.map(e => [e.id,e])), [roster]);
+  const labelOf = (id: string) => {const e = byId.get(id); return e ? e.roleName + (isActive(e) ? '' : ' (archived)') : id;};
+  const [turnError, setTurnError] = useState('');
   const [customizing, setCustomizing] = useState(false);
   const customizeButton = useRef<HTMLButtonElement>(null);
   const [loadingInitial, setLoadingInitial] = useState(true);
@@ -117,8 +106,8 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
   const [isGeneratingStep, setIsGeneratingStep] = useState(false);
   const [cameraPreset, setCameraPreset] = useState<CameraPreset>("ceo-pov");
   const [selectedExecutive, setSelectedExecutive] =
-    useState<ExecutiveRole | null>(null);
-  const [dockOpen, setDockOpen] = useState(true);
+    useState<ExecutiveId | null>(null);
+  const [dockOpen, setDockOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<DockTab>("transcript");
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -160,11 +149,11 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoWalkRef = useRef(autoWalkAndTalk);
-  autoWalkRef.current = autoWalkAndTalk;
+  useEffect(() => {autoWalkRef.current = autoWalkAndTalk;}, [autoWalkAndTalk]);
   const voiceEnabledRef = useRef(voiceEnabled);
-  voiceEnabledRef.current = voiceEnabled;
+  useEffect(() => {voiceEnabledRef.current = voiceEnabled;}, [voiceEnabled]);
 
-  const speakUtterance = useCallback((role: ExecutiveRole, text: string) => {
+  const speakUtterance = useCallback((role: ExecutiveId, text: string) => {
     if (
       !voiceEnabledRef.current ||
       typeof window === "undefined" ||
@@ -190,14 +179,17 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
         : "/api/boardroom";
       const res = await fetch(url);
       const data = await res.json();
+      if (data.roster) setRoster(data.roster);
+      if (!sessionId) setDockOpen(window.innerWidth >= 768);
       if (data.sessions) setSessions(data.sessions);
-      if (data.activeSession) setActiveSession(data.activeSession);
+      if ('activeSession' in data) setActiveSession(data.activeSession);
       if (data.messages) setMessages(data.messages);
       if (data.knowledge) setKnowledge(data.knowledge);
       if (data.config) setConfig(data.config);
       if (data.stats) setStats(data.stats);
       if (data.enterpriseStats) setEnterpriseStats(data.enterpriseStats);
 
+      if (!data.messages?.some((m: ConversationMessage) => m.senderRole !== 'CEO')) setChoreography(prev=>({...prev, speaker:null,listener:null,interactionMode:'idle',speechText:null,isEnriching:false,latestInsightTopic:null,stageLabel:'Ready for a CEO directive'}));
       // Show last message context subtly in idle state if completed
       if (data.messages && data.messages.length > 0) {
         const lastBot = [...data.messages]
@@ -205,8 +197,8 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
           .find((m: ConversationMessage) => m.senderRole !== "CEO");
         if (lastBot) {
           setChoreography({
-            speaker: lastBot.senderRole as ExecutiveRole,
-            listener: lastBot.targetRole as TargetRole,
+            speaker: lastBot.senderRole as ExecutiveId,
+            listener: lastBot.targetRole as ActiveChoreography["listener"],
             roomZone: (lastBot.roomZone as RoomZoneId) || "ceo-briefing",
             interactionMode: "idle",
             speechText: null,
@@ -222,7 +214,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
   }, []);
 
   useEffect(() => {
-    loadBoardroom();
+    void loadBoardroom();
     return () => {
       if (loopTimerRef.current) clearTimeout(loopTimerRef.current);
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -231,6 +223,20 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
     };
   }, [loadBoardroom]);
 
+  // Refresh the chooser on return from another tab; step planning itself always reads SQLite.
+  useEffect(() => {
+    const controller = new AbortController();
+    const refreshRoster = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const response = await fetch('/api/executive-profiles', {cache:'no-store',signal:controller.signal});
+        if (response.ok) setRoster((await response.json()).roster);
+      } catch { /* The current list remains usable; the server validates the address on send. */ }
+    };
+    document.addEventListener('visibilitychange', refreshRoster);
+    return () => { controller.abort(); document.removeEventListener('visibilitychange', refreshRoster); };
+  }, []);
+
   useEffect(() => {
     if (activeTab === "transcript") {
       transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -238,17 +244,17 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
   }, [messages.length, activeTab]);
 
   const executeSingleWalkTalkStep = useCallback(
-    async (
+    async function runStep(
       sessionId: number,
       previewPlan?: StepPlanPreview,
       continueAutonomousCycle = true
-    ) => {
+    ) {
       if (loopTimerRef.current) {
         clearTimeout(loopTimerRef.current);
         loopTimerRef.current = null;
       }
 
-      setIsGeneratingStep(true);
+      setIsGeneratingStep(true); setTurnError('');
 
       // Immediately walk the executives to their planned zone while OpenCode generates
       if (previewPlan) {
@@ -272,7 +278,10 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
         });
 
         const data = await res.json();
+        if (data.roster) setRoster(data.roster);
         if (!res.ok || !data.message) {
+          setTurnError(data.error || "Turn paused. Retry or retarget the question.");
+          setChoreography(prev => ({...prev, speaker:null, listener:null, speechText:null, isEnriching:false, latestInsightTopic:null, stageLabel:"Turn paused"}));
           setIsLoopRunning(false);
           setIsGeneratingStep(false);
           return;
@@ -327,7 +336,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
         ) {
           setIsLoopRunning(true);
           loopTimerRef.current = setTimeout(() => {
-            executeSingleWalkTalkStep(sessionId, nextPlan, true);
+            void runStep(sessionId, nextPlan, true);
           }, 4700);
         } else {
           setIsLoopRunning(false);
@@ -345,6 +354,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
           }, 6800);
         }
       } catch (err) {
+        setTurnError("Turn not confirmed. Refresh the session before retrying.");
         console.error("Deliberation step failed:", err);
         setIsGeneratingStep(false);
         setIsLoopRunning(false);
@@ -353,12 +363,12 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
     [speakUtterance]
   );
 
-  const handleCeoFollowUp = async (content: string, target: "ALL" | ExecutiveRole) => {
+  const handleCeoFollowUp = async (content: string, target: "ALL" | ExecutiveId) => {
     if (!activeSession) return;
-    setCeoInput("");
+    setTurnError('');
     setShowSamplePrompts(false);
     setActiveTab("transcript");
-    setDockOpen(true);
+    if (window.innerWidth >= 768) setDockOpen(true);
     try {
       const res = await fetch("/api/ceo-message", {
         method: "POST",
@@ -366,7 +376,8 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
         body: JSON.stringify({ sessionId: activeSession.id, content, targetRole: target }),
       });
       const data = await res.json();
-      if (!res.ok || !data.message) return;
+      if (!res.ok || !data.message) { setTurnError(data.error || 'Could not send follow-up.'); await loadBoardroom(activeSession.id); return; }
+      setCeoInput('');
       setMessages((prev) => [...prev, data.message as ConversationMessage]);
       if (data.session) {
         const s = data.session as DeliberationSession;
@@ -377,6 +388,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
       setIsLoopRunning(autoWalkAndTalk);
       executeSingleWalkTalkStep(activeSession.id, data.nextPlan as StepPlanPreview, autoWalkAndTalk);
     } catch (err) {
+      setTurnError("Could not confirm follow-up. Refresh before retrying.");
       console.error("Failed to send CEO follow-up:", err);
     }
   };
@@ -403,10 +415,10 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
       loopTimerRef.current = null;
     }
 
-    setCeoInput("");
+    setTurnError('');
     setShowSamplePrompts(false);
     setActiveTab("transcript");
-    setDockOpen(true);
+    if (window.innerWidth >= 768) setDockOpen(true);
 
     try {
       const res = await fetch("/api/sessions", {
@@ -414,11 +426,13 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ceoQuestion: questionText,
+          targetRole: overrideQuestion || composeTarget === "NEW" ? "ALL" : composeTarget,
           autoWalkAndTalk,
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.session) return;
+      if (!res.ok || !data.session) {setTurnError(data.error || 'Could not start session.'); return;}
+      setCeoInput('');
 
       const createdSession: DeliberationSession = data.session;
       const ceoMsg: ConversationMessage = data.ceoMessage;
@@ -446,12 +460,13 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
         executeSingleWalkTalkStep(createdSession.id, firstPlan, false);
       }
     } catch (err) {
+      setTurnError("Could not confirm directive. Refresh before retrying.");
       console.error("Failed to issue CEO directive:", err);
     }
   };
 
   const handleTriggerExtraWalkTalk = () => {
-    if (!activeSession || isGeneratingStep) return;
+    if (!active.length || !activeSession || isGeneratingStep) return;
     setActiveTab("transcript");
     setDockOpen(true);
     setIsLoopRunning(autoWalkAndTalk);
@@ -588,11 +603,12 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
     return true;
   });
 
-  const selectedExecProfile = selectedExecutive
-    ? EXECUTIVES[selectedExecutive]
-    : null;
-  const defaultSkills = selectedExecutive !== null &&
-    profiles[selectedExecutive].skillPrompt === DEFAULT_PROFILES[selectedExecutive].skillPrompt;
+  const selectedExecProfile = active.find(e => e.id === selectedExecutive);
+  const targetMember = active.find(e => e.id === composeTarget);
+  const staleTarget = composeTarget !== 'NEW' && composeTarget !== 'ALL' && !targetMember;
+  const speaker = active.find(e => e.id === choreography.speaker);
+  const listener = active.find(e => e.id === choreography.listener);
+  const validStage = speaker && (!choreography.listener || choreography.listener === 'CEO' || listener);
   const selectedExecInsightsCount = selectedExecutive
     ? knowledge.filter(
         (k) =>
@@ -620,7 +636,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
               </span>
             </div>
             <p className="hidden text-[11px] text-slate-500 md:block">
-              Autonomous CTO · CFO · COO Walk-and-Talk & Knowledge Enrichment
+              Executive deliberations · Live roster
             </p>
           </div>
         </div>
@@ -655,7 +671,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                 ? "border-blue-200 bg-blue-50 text-blue-700"
                 : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
             }`}
-            title="Toggle automatic multi-turn Walk & Talk between CTO, CFO, and COO"
+            aria-label="Automatic Walk & Talk" aria-pressed={autoWalkAndTalk} title="Toggle automatic multi-turn Walk & Talk"
           >
             <Footprints className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Auto Walk & Talk:</span>
@@ -781,7 +797,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
             </div>
           ) : (
             <VirtualOfficeCanvas
-              profiles={profiles}
+              speaker={validStage ? speaker : undefined} listener={validStage ? listener : undefined}
               choreography={choreography}
               cameraPreset={cameraPreset}
               selectedExecutive={selectedExecutive}
@@ -789,25 +805,18 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                 setSelectedExecutive((prev) => (prev === role ? null : role));
                 setCameraPreset(`focus-${role}` as CameraPreset);
               }}
-              modelsByRole={{
-                CTO: config.ctoModel,
-                CFO: config.cfoModel,
-                COO: config.cooModel,
-              }}
             />
           )}
 
           {/* Top-Left Camera Vantage & Spatial Room Legend */}
-          <div className="pointer-events-auto absolute top-4 left-4 z-20 flex flex-col gap-2.5">
+          <div className="pointer-events-auto absolute top-2 left-2 right-2 sm:right-auto z-20 flex max-w-full flex-col items-start gap-2">
             <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-slate-200/80 bg-white/88 p-1.5 shadow-sm backdrop-blur-md">
               {(
                 [
                   { id: "ceo-pov", label: "CEO POV" },
                   { id: "follow-huddle", label: "Follow Walk & Talk" },
                   { id: "boardroom-overview", label: "Room Orbit" },
-                  { id: "focus-CTO", label: "CTO" },
-                  { id: "focus-CFO", label: "CFO" },
-                  { id: "focus-COO", label: "COO" },
+
                 ] as Array<{ id: CameraPreset; label: string }>
               ).map((cam) => (
                 <button
@@ -815,13 +824,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                   type="button"
                   onClick={() => {
                     setCameraPreset(cam.id);
-                    if (cam.id.startsWith("focus-")) {
-                      setSelectedExecutive(
-                        cam.id.replace("focus-", "") as ExecutiveRole
-                      );
-                    } else {
-                      setSelectedExecutive(null);
-                    }
+                    setSelectedExecutive(null);
                   }}
                   className={`rounded-xl px-2.5 py-1 text-[11px] font-semibold transition ${
                     cameraPreset === cam.id
@@ -834,6 +837,11 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
               ))}
             </div>
 
+            <label className="flex max-w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700">Roster
+              <select aria-label="Select executive" value={selectedExecProfile?.id || ''} className="max-w-44 min-w-0 rounded bg-slate-50 px-1 py-1" onChange={e => {
+                const id = e.target.value; setSelectedExecutive(isExecutiveId(id) ? id : null); setCameraPreset(isExecutiveId(id) ? `focus-${id}` : 'ceo-pov');
+              }}><option value="">{active.length} active executives</option>{active.map(e=><option key={e.id} value={e.id}>{e.roleName} · {e.displayName}</option>)}</select>
+            </label>
             {/* Selected Executive Dossier Card */}
             {selectedExecProfile && (
               <div className="w-72 rounded-2xl border border-slate-200/90 bg-white/92 p-3.5 shadow-lg backdrop-blur-md">
@@ -843,17 +851,17 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                       <span
                         className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white"
                         style={{
-                          backgroundColor: selectedExecProfile.accentHex,
+                          backgroundColor: accentOf(selectedExecProfile.id),
                         }}
                       >
-                        {selectedExecProfile.role}
+                        {selectedExecProfile.roleName}
                       </span>
                       <h3 className="text-xs font-bold wrap-anywhere text-slate-900">
-                        {profiles[selectedExecProfile.role].displayName}
+                        {selectedExecProfile.displayName}
                       </h3>
                     </div>
                     <p className="mt-0.5 text-[11px] font-medium wrap-anywhere text-slate-600">
-                      {profiles[selectedExecProfile.role].job}
+                      {selectedExecProfile.job}
                     </p>
                   </div>
                   <button
@@ -868,24 +876,11 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                   </button>
                 </div>
                 <p className="mt-2 line-clamp-4 text-[11px] leading-relaxed whitespace-pre-line wrap-anywhere text-slate-600">
-                  {defaultSkills ? selectedExecProfile.shortBio : profiles[selectedExecProfile.role].skillPrompt}
+                  {selectedExecProfile.skillPrompt}
                 </p>
-                {defaultSkills && (
-                  <div className="mt-2.5 flex flex-wrap gap-1">
-                    {selectedExecProfile.specialties.map((sp) => (
-                      <span key={sp} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
-                        {sp}
-                      </span>
-                    ))}
-                  </div>
-                )}
                 <div className="mt-2.5 flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-500">
                   <span className="font-mono truncate max-w-[155px]">
-                    {selectedExecutive === "CTO"
-                      ? config.ctoModel
-                      : selectedExecutive === "CFO"
-                      ? config.cfoModel
-                      : config.cooModel}
+                    {selectedExecProfile.model}
                   </span>
                   <span className="font-semibold text-slate-700">
                     {selectedExecInsightsCount} DB Insights
@@ -916,7 +911,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                 </span>
               )}
 
-              {activeSession && !isGeneratingStep && (
+              {activeSession && active.length > 0 && !isGeneratingStep && (
                 <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
                   {isLoopRunning ? (
                     <>
@@ -990,36 +985,13 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
               </div>
             )}
 
-            {activeSession && (
-              <div className="pointer-events-auto mb-1.5 flex flex-wrap items-center justify-center gap-1 rounded-xl border border-slate-200/80 bg-white/92 px-2 py-1 shadow-sm backdrop-blur-md">
-                <span className="px-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                  CEO speaks to:
-                </span>
-                {(["NEW", "ALL", "CTO", "CFO", "COO"] as ComposeTarget[]).map((t) => {
-                  const active = composeTarget === t;
-                  const accent =
-                    t === "CTO" || t === "CFO" || t === "COO"
-                      ? EXECUTIVES[t].accentHex
-                      : t === "ALL"
-                      ? "#1D4ED8"
-                      : "#0F172A";
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setComposeTarget(t)}
-                      className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-semibold transition ${
-                        active ? "text-white shadow-2xs" : "text-slate-600 hover:bg-slate-100"
-                      }`}
-                      style={active ? { backgroundColor: accent } : undefined}
-                    >
-                      {t !== "NEW" && <CornerDownRight className="h-3 w-3" />}
-                      {t === "NEW" ? "New Question" : t === "ALL" ? "Follow-up → All" : `→ ${t}`}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {(turnError || !active.length) && <p role="alert" className="pointer-events-auto mb-1 rounded-lg bg-amber-50 p-2 text-sm text-amber-950">{turnError || 'No active executives. Add one in Customize bots to resume.'}</p>}
+            <label className="pointer-events-auto mb-1 flex max-w-full items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">CEO speaks to
+              <select aria-label="Message recipient" value={composeTarget} onChange={e => {setComposeTarget(e.target.value as ComposeTarget); setTurnError('');}} className="max-w-48 min-w-0 rounded bg-slate-50 p-1">
+                <option value="NEW">New question</option><option value="ALL">Whole team</option>
+                {staleTarget && <option value={composeTarget} disabled>Archived — choose a recipient</option>}
+                {active.map(e => <option key={e.id} value={e.id}>{e.roleName} · {e.displayName}</option>)}
+              </select></label>
 
             <form
               onSubmit={(e) => handleSubmitCeoDirective(e)}
@@ -1037,21 +1009,21 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
 
               <input
                 type="text"
-                value={ceoInput}
+                aria-label="CEO question" value={ceoInput}
                 onChange={(e) => setCeoInput(e.target.value)}
                 placeholder={
                   composeTarget === "NEW" || !activeSession
-                    ? "Act as CEO: ask a strategic question for CTO, CFO & COO to walk, talk & enrich knowledge..."
+                    ? "Ask your executives a strategic question…"
                     : composeTarget === "ALL"
                     ? "Follow up with the whole C-suite on the active question..."
-                    : `Ask ${profiles[composeTarget].displayName} (${composeTarget}) directly — they will remember it...`
+                    : `Ask ${targetMember?.displayName || "an active executive"} directly…`
                 }
-                className="flex-1 bg-transparent px-2 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
               />
 
               <button
                 type="submit"
-                disabled={!ceoInput.trim() || isGeneratingStep}
+                disabled={!active.length || staleTarget || !ceoInput.trim() || isGeneratingStep}
                 className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-800 disabled:opacity-50"
               >
                 <span>Ask C-Suite</span>
@@ -1063,7 +1035,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
 
         {/* Right Glassmorphic Boardroom Intelligence Dock */}
         {dockOpen && (
-          <aside className="z-20 flex h-full w-full flex-col border-l border-slate-200/90 bg-white/94 backdrop-blur-md sm:w-[420px] shrink-0">
+          <aside className="absolute inset-0 sm:static z-20 flex h-full w-full flex-col border-l border-slate-200/90 bg-white/94 backdrop-blur-md sm:w-[420px] shrink-0">
             {/* Tabs */}
             <div className="grid grid-cols-4 gap-1 border-b border-slate-200/80 bg-slate-50/80 p-2">
               <button
@@ -1146,7 +1118,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                               : "bg-blue-50 text-blue-700"
                           }`}
                         >
-                          {activeSession.status === "completed"
+                          {activeSession.status === "paused" ? "Paused" : activeSession.status === "completed"
                             ? "Consensus Saved"
                             : "Deliberating"}
                         </span>
@@ -1161,7 +1133,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                       {messages.map((msg) => {
                         const isCeo = msg.senderRole === "CEO";
                         const exec = !isCeo
-                          ? EXECUTIVES[msg.senderRole as ExecutiveRole]
+                          ? byId.get(msg.senderRole)
                           : null;
                         const zoneLabel =
                           ROOM_ZONES[msg.roomZone as RoomZoneId]?.label ||
@@ -1185,17 +1157,17 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                                   style={{
                                     backgroundColor: isCeo
                                       ? "#2563EB"
-                                      : exec?.accentHex || "#334155",
+                                      : accentOf(msg.senderRole),
                                   }}
                                 >
-                                  {msg.senderRole} → {msg.targetRole}
+                                  {labelOf(msg.senderRole)} → {labelOf(msg.targetRole)}
                                 </span>
                                 <span
                                   className={`text-xs font-semibold wrap-anywhere ${
                                     isCeo ? "text-slate-100" : "text-slate-800"
                                   }`}
                                 >
-                                  {isCeo ? "You (CEO)" : exec && profiles[exec.role].displayName}
+                                  {isCeo ? "You (CEO)" : exec?.displayName}
                                 </span>
                               </div>
                               <span
@@ -1245,7 +1217,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                     <div className="border-t border-slate-200/80 bg-slate-50/80 p-3">
                       <button
                         type="button"
-                        disabled={isGeneratingStep}
+                        disabled={!active.length || isGeneratingStep}
                         onClick={handleTriggerExtraWalkTalk}
                         className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white py-2 text-xs font-semibold text-blue-700 shadow-2xs transition hover:bg-blue-50 disabled:opacity-50"
                       >
@@ -1340,22 +1312,8 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                     />
                   </div>
 
-                  <div className="flex gap-1">
-                    {["ALL", "CTO", "CFO", "COO", "JOINT"].map((r) => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => setKnowledgeRoleFilter(r)}
-                        className={`flex-1 rounded-lg py-1 text-[11px] font-semibold transition ${
-                          knowledgeRoleFilter === r
-                            ? "bg-slate-900 text-white"
-                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
-                        }`}
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
+                  <label className="block text-xs font-semibold">Contributor <select className="max-w-full rounded border bg-white p-1" value={knowledgeRoleFilter} onChange={e=>setKnowledgeRoleFilter(e.target.value)}>
+                    {['ALL','JOINT',...roster.map(e=>e.id)].map(id=><option key={id} value={id}>{labelOf(id)}</option>)}</select></label>
 
                   {/* Optional Add CEO Institutional Principle Form */}
                   {addingMandate && (
@@ -1373,9 +1331,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                           className="rounded border border-slate-200 px-2 py-0.5 text-[11px]"
                         >
                           <option value="JOINT">JOINT (All C-Suite)</option>
-                          <option value="CTO">CTO Domain</option>
-                          <option value="CFO">CFO Domain</option>
-                          <option value="COO">COO Domain</option>
+                          {active.map(e=><option key={e.id} value={e.id}>{e.roleName}</option>)}
                         </select>
                       </div>
                       <input
@@ -1389,7 +1345,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                         rows={2}
                         value={mandateInsight}
                         onChange={(e) => setMandateInsight(e.target.value)}
-                        placeholder="Actionable knowledge that CTO, CFO & COO will recall in future deliberations..."
+                        placeholder="Actionable knowledge that the executives will recall in future deliberations..."
                         className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"
                       />
                       <div className="flex justify-end gap-1.5">
@@ -1434,10 +1390,10 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
                               className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white"
                               style={{ backgroundColor: roleAccent }}
                             >
-                              {k.contributorRole}
+                              {labelOf(k.contributorRole)}
                               {k.collaboratorRole &&
                               k.collaboratorRole !== "ALL"
-                                ? ` × ${k.collaboratorRole}`
+                                ? ` × ${labelOf(k.collaboratorRole)}`
                                 : ""}
                             </span>
                             <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 capitalize">
@@ -1517,7 +1473,7 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
 
             {/* TAB 4: CEO Persona & Long-Term Executive Memory */}
             {activeTab === "memory" && (
-              <MemoryPanel profiles={profiles} refreshKey={memoryRefreshKey} />
+              <MemoryPanel roster={roster} refreshKey={memoryRefreshKey} />
             )}
 
             {/* TAB 3: Saved SQLite CEO Question Archive */}
@@ -1602,27 +1558,30 @@ export default function ExecutiveBoardroomApp({ initialProfiles }: { initialProf
       </div>
 
       {/* CEO Enterprise AI Knowledge & Memory OS Studio */}
-      <EnterpriseKnowledgeModal
+      {knowledgeOsOpen && <EnterpriseKnowledgeModal roster={active}
         open={knowledgeOsOpen}
         initialTab={knowledgeOsTab}
         onClose={() => setKnowledgeOsOpen(false)}
         onStatsChanged={() => loadBoardroom(activeSession?.id)}
-      />
+      />}
 
       {customizing && <CustomizeBotsDialog
-        profiles={profiles} initialRole={selectedExecutive || "CTO"}
-        onSaved={(role, profile) => setProfiles((current) => ({ ...current, [role]: profile }))}
+        roster={roster} initialId={selectedExecutive}
+        onSaved={rows => {
+          setRoster(rows); setTurnError(''); setMemoryRefreshKey(k=>k+1);
+          if (!rows.some(isActive)) handlePauseLoop();
+        }}
         onClose={() => { setCustomizing(false); customizeButton.current?.focus(); }}
       />}
 
       {/* OpenCode AI Model API Configuration Modal */}
-      <OpencodeConfigModal
-        profiles={profiles}
+      {configModalOpen && <OpencodeConfigModal
+        roster={active}
         open={configModalOpen}
         config={config}
         onClose={() => setConfigModalOpen(false)}
-        onUpdated={(updated) => setConfig(updated)}
-      />
+        onUpdated={(updated, rows) => {setConfig(updated); setRoster(rows);}}
+      />}
     </div>
   );
 }

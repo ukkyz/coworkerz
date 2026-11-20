@@ -1,20 +1,34 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { isExecutiveRole } from "@/lib/executives";
-import { validateProfile } from "@/lib/executive-profiles";
-import { saveExecutiveProfile } from "@/lib/executive-profile-store";
-import { requireCeoConsole } from "../access";
+import {
+  archiveExecutive,
+  createExecutive,
+  requireActive,
+  rosterPayload,
+  saveExecutiveProfile,
+} from "@/lib/executive-profile-store";
+import { profileOf } from "@/lib/roster";
+import { withCeo } from "../access";
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ role: string }> }) {
-  try {
-    const denied = await requireCeoConsole(req);
-    if (denied) return denied;
+type Context = { params: Promise<{ role: string }> };
+export const PUT = (req: NextRequest, { params }: Context) =>
+  withCeo(req, async () => {
     const { role } = await params;
-    if (!isExecutiveRole(role)) return NextResponse.json({ error: "Unknown executive role." }, { status: 404 });
-    const result = validateProfile(await req.json().catch(() => null));
-    if ("error" in result) return NextResponse.json(result, { status: 400 });
-    saveExecutiveProfile(role, result.profile);
-    return NextResponse.json({ role, profile: result.profile });
-  } catch {
-    return NextResponse.json({ error: "The profile could not be saved. Try again." }, { status: 500 });
-  }
-}
+    requireActive(role);
+    const executive = saveExecutiveProfile(role, await req.json().catch(() => null));
+    return NextResponse.json({
+      role,
+      profile: profileOf(executive),
+      executive,
+      ...rosterPayload(),
+    });
+  });
+export const POST = (req: NextRequest, { params }: Context) =>
+  withCeo(req, async () => {
+    const executive = createExecutive(await req.json().catch(() => null), (await params).role);
+    return NextResponse.json({ executive, ...rosterPayload() }, { status: 201 });
+  });
+export const DELETE = (req: NextRequest, { params }: Context) =>
+  withCeo(req, async () => {
+    archiveExecutive((await params).role);
+    return NextResponse.json(rosterPayload());
+  });

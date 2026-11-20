@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import {
   getActiveTaxonomyScheme,
-  resolvePrincipal,
+  resolveEnterprisePrincipal,
 } from "@/lib/enterprise-knowledge";
 import { autoClassifyDocument } from "@/lib/enterprise-taxonomy";
 
@@ -22,11 +22,11 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveEnterprisePrincipal(req);
     if (auth.error) {
       return NextResponse.json(
         { error: auth.error },
-        { status: 401, headers: HEADERS }
+        { status: auth.status, headers: HEADERS }
       );
     }
 

@@ -1,30 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { execFileSync, fork } from "node:child_process";
-import { once } from "node:events";
+import { execFileSync } from "node:child_process";
+import { serve } from "./serve";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pilot from "../../prompts/v1/turn-fixture.json";
 
 const maya = { displayName: "Maya Santoso", job: "Pilot Funding Adviser", skillPrompt: "Identify the budget cap and propose one measurable release gate." };
-interface TurnRequest { type: "turn"; model: string; temperature: number; messages: { role: string; content: string }[] }
-
-// Each start is a fresh Node process. The SQLite file (not JS state) spans restarts.
-async function serve(env: NodeJS.ProcessEnv) {
-  const child = fork("scripts/browser/profile-server.mjs", [], { env, execArgv: [] });
-  const turns: TurnRequest[] = [];
-  const exited = once(child, "exit");
-  const ready = new Promise<string>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code) => reject(new Error(`Fixture exited (${code})`)));
-    child.on("message", (msg: TurnRequest | { type: "ready"; port: number }) => {
-      if (msg.type === "ready") resolve(`http://127.0.0.1:${msg.port}`);
-      else turns.push(msg);
-    });
-  });
-  return { url: await ready, turns, stop: async () => { if (child.connected) child.disconnect(); await exited; } };
-}
-
 test.use({
   viewport: { width: 1024, height: 720 },
   launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH },
@@ -44,7 +26,7 @@ test("CEO edits only the CFO; the UI and subsequent turns use the persisted iden
     const before = await readProfiles();
     await page.goto(server.url);
     const canvas = await page.locator("canvas").elementHandle();
-    await page.getByRole("button", { name: "CFO", exact: true }).click();
+    await page.getByLabel("Select executive",{exact:true}).selectOption("CFO");
     const open = page.getByRole("button", { name: "Customize bots" });
     const dialog = page.getByRole("dialog", { name: "Customize bots" });
     const name = dialog.getByLabel("Display name");
@@ -70,15 +52,15 @@ test("CEO edits only the CFO; the UI and subsequent turns use the persisted iden
     expect(await canvas!.evaluate((el) => el.isConnected && el === document.querySelector("canvas"))).toBe(true);
     await page.keyboard.press("Escape");
     await expect(open).toBeFocused();
-    const plate = page.getByRole("button", { name: `View ${maya.displayName}, ${maya.job} (CFO)`, exact: true });
-    await expect(plate).toContainText(maya.displayName);
+    const cfoOption = page.getByLabel('Select executive',{exact:true}).locator('option[value="CFO"]');
+    await expect(cfoOption).toContainText(maya.displayName);
     await expect(page.getByRole("heading", { name: maya.displayName })).toBeVisible();
     await expect(page.locator("aside").getByText(maya.displayName, { exact: true }).first()).toBeVisible();
     expect(await readProfiles()).toEqual({ ...before, CFO: maya });
 
     await page.setViewportSize({ width: 375, height: 740 });
     await page.reload();
-    await expect(plate).toContainText(maya.job);
+    await expect(cfoOption).toContainText(maya.displayName);
     await open.click();
     await dialog.getByLabel("Executive role").selectOption("CFO");
     await expect(name).toHaveValue(maya.displayName);
@@ -95,7 +77,7 @@ test("CEO edits only the CFO; the UI and subsequent turns use the persisted iden
     await server.stop();
     server = await serve(env);
     await page.goto(server.url);
-    await expect(plate).toContainText(maya.displayName);
+    await expect(cfoOption).toContainText(maya.displayName);
     expect(await readProfiles()).toEqual({ ...before, CFO: maya });
     const post = async (path: string, data: object) => {
       const res = await request.post(`${server!.url}/api/${path}`, { data });
@@ -115,9 +97,9 @@ test("CEO edits only the CFO; the UI and subsequent turns use the persisted iden
     const { config } = await (await request.get(`${server.url}/api/opencode-config`)).json();
     expect([cfo.model, cto.model]).toEqual([config.cfoModel, config.ctoModel].map((id) => id.replace(/^opencode\//, "")));
     expect([cfo.temperature, cto.temperature]).toEqual([Number(config.temperature), Number(config.temperature)]);
-    expect(cfo.messages[1].content).toContain(JSON.stringify(maya));
+    expect(cfo.messages[1].content).toContain(JSON.stringify({roleName:"CFO",...maya}));
     expect(cfo.messages[0].content).not.toContain(maya.skillPrompt);
-    expect(cto.messages[1].content).toContain(JSON.stringify(before.CTO));
+    expect(cto.messages[1].content).toContain(JSON.stringify({roleName:"CTO",...before.CTO}));
     expect(JSON.stringify(cto.messages)).not.toContain(maya.skillPrompt);
     for (const turn of server.turns) {
       const system = turn.messages[0].content;

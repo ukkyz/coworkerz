@@ -10,7 +10,7 @@ import {
 import {
   canPrincipalRead,
   ingestEnterpriseDocument,
-  resolvePrincipal,
+  resolveEnterprisePrincipal,
 } from "@/lib/enterprise-knowledge";
 
 export const dynamic = "force-dynamic";
@@ -29,11 +29,11 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveEnterprisePrincipal(req);
     if (auth.error) {
       return NextResponse.json(
         { error: auth.error },
-        { status: 401, headers: HEADERS }
+        { status: auth.status, headers: HEADERS }
       );
     }
 
@@ -111,11 +111,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await resolvePrincipal(req);
+    const auth = await resolveEnterprisePrincipal(req);
     if (auth.error) {
       return NextResponse.json(
         { error: auth.error },
-        { status: 401, headers: HEADERS }
+        { status: auth.status, headers: HEADERS }
       );
     }
     if (!auth.principal.canWrite) {

@@ -10,10 +10,9 @@ import {
 } from "@/db/schema";
 import { getActiveOpencodeConfig } from "@/lib/opencode-config";
 import { asc, desc, eq } from "drizzle-orm";
-import {
-  deriveDeliberationContext,
-  planDeliberationStep,
-} from "@/lib/opencode";
+import { planDeliberationStep } from "@/lib/turn-planner";
+import { getRoster } from "@/lib/executive-profile-store";
+import { requireCeoConsole } from '../executive-profiles/access';
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +25,7 @@ function maskKey(key: string): string {
 
 export async function GET(req: NextRequest) {
   try {
+    const denied = await requireCeoConsole(req); if (denied) return denied;
     const requestedSessionId = req.nextUrl.searchParams.get("sessionId");
     const sessions = await db
       .select()
@@ -34,9 +34,10 @@ export async function GET(req: NextRequest) {
       .limit(30);
 
     const activeSession = requestedSessionId
-      ? sessions.find((s) => s.id === Number(requestedSessionId)) || sessions[0]
+      ? db.select().from(deliberationSessions).where(eq(deliberationSessions.id,Number(requestedSessionId))).get()
       : sessions[0] || null;
 
+    if (requestedSessionId && !activeSession) return NextResponse.json({error:"Session not found"},{status:404});
     const messages = activeSession
       ? await db
           .select()
@@ -57,14 +58,8 @@ export async function GET(req: NextRequest) {
         process.env.OPENAI_API_KEY?.trim()
     );
 
-    const deliberationCtx = deriveDeliberationContext(messages);
-    const nextPlan = activeSession
-      ? planDeliberationStep(
-          deliberationCtx.turnsSinceLastCeo,
-          config.walkTalkRounds,
-          deliberationCtx.lastCeo
-        )
-      : null;
+    const roster = getRoster();
+    const nextPlan = activeSession ? planDeliberationStep(roster, messages, config.walkTalkRounds, activeSession.ceoQuestion) : null;
 
     const [ekDocs, ekEnts, ekRels] = await Promise.all([
       db
@@ -98,7 +93,7 @@ export async function GET(req: NextRequest) {
       activeSession,
       messages,
       knowledge,
-      nextPlan,
+      nextPlan, roster,
       config: {
         id: config.id,
         baseUrl: config.baseUrl,

@@ -15,6 +15,13 @@
       "when": 1795078634402,
       "tag": "0001_executive_profile_overrides",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795137740422,
+      "tag": "0002_live_executive_roster",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 # Coworkerz · 3D Executive Suite
 
-You occupy the CEO seat. Give the CTO, CFO and COO a directive, watch them walk between stations, then address a follow-up to one executive or the whole team. The boardroom, labeled *Aether* in the UI, connects a procedural Three.js office to OpenCode-compatible chat completions and a file-backed SQLite record of sessions, insights and enterprise knowledge.
+You occupy the CEO seat. Start with a CTO, CFO and COO, or assemble your own executive team. Address one person or ask the whole team; the room stages the current exchange. The boardroom, labeled *Aether* in the UI, connects a procedural Three.js office to OpenCode-compatible chat completions and a file-backed SQLite record of sessions, insights and enterprise knowledge.
 
 ## Give your next coding agent a task
 
@@ -26,15 +26,13 @@ Paste the output into an agent that has this checkout. No install, database or A
 
    `DATABASE_URL` defaults to `.local/coworkerz.sqlite`. If your `.env` still has a PostgreSQL URL, replace it **before setup**. Use a local path, absolute or relative to the project root (`file:./data/suite.sqlite` also works). The CLI and Next use the same env-file precedence and create missing parent directories. Set `NODE_ENV=production` for jobs that should load `.env.production`. Point `MEMORY_DIR` and `KNOWLEDGE_DIR` at throwaway directories for testing.
 3. Open the URL Next prints (normally `http://localhost:3000`). `/api/health` checks connection access only; `/api/boardroom` exercises the migrated schema and seed. Requests no longer create tables or repopulate the demo.
-4. In OpenCode settings, inspect the gateway, per-role models, temperature and rounds. Provider credentials are optional for local synthesis. **No key does not mean no network:** free model IDs can use a public bearer, and the live client can retry the Zen gateway. Use only synthetic data on a trusted local instance; block provider egress if an offline run is required. The interactive console assumes a trusted CEO; it is not a production identity boundary.
+4. In OpenCode settings, inspect the gateway, per-role models, temperature and rounds. Provider credentials are optional for local synthesis. **No key does not mean no network:** free model IDs can use a public bearer, and the live client can retry the Zen gateway. Use only synthetic data on a trusted local instance; set `OPENCODE_OFFLINE=1` to disable provider requests (including gateway diagnostics) for an offline run. The interactive console assumes a trusted CEO; it is not a production identity boundary.
 
-## Customize an executive
+## Manage the executive roster
 
-In the boardroom header, open **Customize bots**, choose **CTO**, **CFO** or **COO**, then edit **Display name**, **Job**, and **AI skill prompt**. For example, give the CFO the job *Pilot Funding Adviser* and ask it to identify a budget cap before recommending a release gate. **Save** updates that bot's nameplate and labels immediately. **Cancel** discards unsaved edits; **Restore defaults** is a draft change until saved.
+Open **Customize bots** to add an executive with a suggested or custom role, job, skill prompt, model and explicit access preset. **Edit profile** preserves identity. **Replace executive** and **Remove executive** archive the old identity; its journal and transcript stay available to the CEO. All active executives remain selectable in an open session, even when offscreen. With no active executives, deliberations pause.
 
-The saved guidance applies to that speaker's next model request. Local fallback uses the updated names but is a fixed template, not a model that interprets skill prompts. Model settings, conversation history, memory ownership and enterprise permissions stay with the permanent role, even if two bots share a name.
-
-For an existing SQLite suite, run **`npm run db:migrate`** before starting this release. The migration adds one override table; roles without a row use the built-in profiles. No reseed is necessary.
+**Existing database?** Back it up, stop old writers and run **`npm run db:migrate`**. No reseed. See the [migration, API transition and permissions guide](docs/executive-roster.md). In particular, `CFO` never becomes an alias for a successor.
 
 ## Database lifecycle
 
@@ -53,9 +51,9 @@ For an existing SQLite suite, run **`npm run db:migrate`** before starting this 
 | --- | --- |
 | `node --test scripts/brief.test.mjs` | Prompt assembly only, no app dependencies |
 | `npm run test:db` | Exercises fresh and populated temporary SQLite files: migrations, isolated profile writes/validation, fallback names, memory and enterprise retrieval |
-| `npm run test:profiles:ui` | After `npm run build` and `npx playwright install chromium`, runs the keyboard/mobile profile workflow in Chromium, restarts the Next server, and inspects mocked CFO/CTO requests. Creates its own temporary SQLite file; no provider key or running server needed. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an existing Chromium executable. |
+| `npm run test:roster:ui` | After `npm run build` and `npx playwright install chromium`, runs the keyboard/mobile profile and live-roster workflows in Chromium, restarts Next, and inspects mocked identity-scoped requests. `test:profiles:ui` runs just the original edit regression. Creates its own temporary SQLite file; no provider key or running server needed. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to use an existing Chromium executable. |
 | `npm run typecheck` / `npm run lint` | TypeScript / ESLint against the app |
-| `npm run build` then `npm start` | Production build then server; run `db:setup` against the target file first. The root layout uses `next/font/google`, so builds need font access or a populated cache. |
+| `npm run build` then `npm start` | Production build then server; run `db:setup` against the target file first. The original Inter and Plus Jakarta Sans faces are bundled from pinned Fontsource packages via `next/font/local`; no Google Fonts connection is needed at build time. |
 
 Baseline at `7bb9ac2`: typecheck passed; repo-wide lint reported 12 existing React hook errors in the boardroom, canvas and knowledge views. Recheck on your revision and distinguish new failures; do not disable rules to hide the baseline.
 

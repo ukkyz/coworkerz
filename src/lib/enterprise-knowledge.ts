@@ -1,3 +1,6 @@
+import { getMember, RosterError } from "./executive-profile-store";
+import { isActive } from "./roster";
+import { isExecutiveRole } from "./executives";
 import crypto from "crypto";
 import { writeTaxonomyMirrors } from "./taxonomy-mirrors";
 import type { NextRequest } from "next/server";
@@ -47,7 +50,7 @@ const CLEARANCE_RANK: Record<ClearanceLevel, number> = {
   board_restricted: 3,
 };
 
-const DEFAULT_ROLE_CLEARANCE: Record<PrincipalRole, ClearanceLevel> = {
+const DEFAULT_ROLE_CLEARANCE: Record<"CEO" | "CTO" | "CFO" | "COO" | "EXTERNAL_AGENT", ClearanceLevel> = {
   CEO: "board_restricted",
   CFO: "board_restricted",
   CTO: "confidential",
@@ -69,14 +72,6 @@ export interface AccessPrincipal {
 // ============================================================================
 // ACL & EXTERNAL AI TOOL AUTHENTICATION
 // ============================================================================
-const VALID_ROLES = new Set<PrincipalRole>([
-  "CEO",
-  "CTO",
-  "CFO",
-  "COO",
-  "EXTERNAL_AGENT",
-]);
-
 function normalizeClearance(val: string | undefined | null): ClearanceLevel {
   if (
     val === "public" ||
@@ -89,90 +84,122 @@ function normalizeClearance(val: string | undefined | null): ClearanceLevel {
   return "internal";
 }
 
-export function makeRolePrincipal(
-  role: PrincipalRole,
-  authType: AccessPrincipal["authType"] = "role-simulation"
+/** Resolve the membership and its policy from a single roster row. Never derive authority from a title. */
+function lookupRights(
+  value: string,
+  authType: AccessPrincipal["authType"],
+): { principal: AccessPrincipal; capped: boolean } | null {
+  if (value === "CEO" || value === "EXTERNAL_AGENT") {
+    return {
+      capped: false,
+      principal: {
+        authType,
+        role: value,
+        clearance: DEFAULT_ROLE_CLEARANCE[value],
+        allowedDomains: ["*"],
+        canWrite: value === "CEO",
+        canReadAgentMemory: value === "CEO",
+      },
+    };
+  }
+  const member = getMember(value);
+  if (!member || !isActive(member)) return null;
+  const id = member.id;
+  const legacy = member.preset === "legacy" && isExecutiveRole(id);
+  const reader =
+    member.preset === "internal" || member.preset === "confidential" ? member.preset : null;
+  return {
+    capped: !legacy,
+    principal: {
+      authType,
+      role: member.id,
+      clearance: legacy ? DEFAULT_ROLE_CLEARANCE[id] : (reader ?? "public"),
+      allowedDomains: legacy || reader ? ["*"] : [],
+      canWrite: legacy,
+      canReadAgentMemory: false,
+    },
+  };
+}
+
+function denied(
+  authType: AccessPrincipal["authType"],
+  role: PrincipalRole = "EXTERNAL_AGENT",
 ): AccessPrincipal {
   return {
     authType,
     role,
-    clearance: DEFAULT_ROLE_CLEARANCE[role],
-    allowedDomains: ["*"],
-    canWrite: role === "CEO" || role === "CTO" || role === "CFO" || role === "COO",
-    canReadAgentMemory: role === "CEO",
+    clearance: "public",
+    allowedDomains: [],
+    canWrite: false,
+    canReadAgentMemory: false,
   };
+}
+export function makeRolePrincipal(
+  role: PrincipalRole,
+  authType: AccessPrincipal["authType"] = "role-simulation",
+): AccessPrincipal {
+  return lookupRights(role, authType)?.principal ?? denied(authType, role);
 }
 
 export async function resolvePrincipal(
-  req: NextRequest
+  req: NextRequest,
+  bodyRole?: string,
 ): Promise<{ principal: AccessPrincipal; error?: string }> {
-  const authHeader = req.headers.get("authorization") || "";
-  const xApiKey = req.headers.get("x-api-key") || "";
-  const bearerToken = authHeader.toLowerCase().startsWith("bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-  const rawKey = (xApiKey || bearerToken).trim();
-
-  if (rawKey) {
-    const hash = crypto.createHash("sha256").update(rawKey).digest("hex");
-    const [keyRow] = await db
-      .select()
-      .from(ekApiKeys)
-      .where(eq(ekApiKeys.keyHash, hash))
-      .limit(1);
-
-    if (!keyRow || keyRow.revoked) {
+  const auth = req.headers.get("authorization") ?? "";
+  const key = (
+    req.headers.get("x-api-key") || (/^Bearer /i.test(auth) ? auth.slice(7) : "")
+  ).trim();
+  if (req.headers.has("authorization") || req.headers.has("x-api-key")) {
+    const hash = crypto.createHash("sha256").update(key).digest("hex");
+    const row = key && db.select().from(ekApiKeys).where(eq(ekApiKeys.keyHash, hash)).get();
+    const rights = row && !row.revoked && lookupRights(row.assignedRole, "api-key");
+    if (!row || !rights)
       return {
-        principal: makeRolePrincipal("EXTERNAL_AGENT", "api-key"),
-        error: "Invalid or revoked Enterprise Knowledge API key.",
+        principal: denied("api-key"),
+        error: "Invalid, revoked or inactive Enterprise Knowledge key.",
       };
-    }
-
-    await db
-      .update(ekApiKeys)
-      .set({
-        requestCount: sql`${ekApiKeys.requestCount} + 1`,
-        lastUsedAt: new Date(),
-      })
-      .where(eq(ekApiKeys.id, keyRow.id));
-
-    const role = VALID_ROLES.has(keyRow.assignedRole as PrincipalRole)
-      ? (keyRow.assignedRole as PrincipalRole)
-      : "EXTERNAL_AGENT";
-
+    db.update(ekApiKeys)
+      .set({ requestCount: sql`${ekApiKeys.requestCount} + 1`, lastUsedAt: new Date() })
+      .where(eq(ekApiKeys.id, row.id))
+      .run();
+    const { capped, principal } = rights;
+    const clearance = normalizeClearance(row.clearanceLevel);
+    // Pre-roster credentials retain their existing semantics (including empty scope = all).
+    const keyDomains = row.allowedDomains.length || capped ? row.allowedDomains : ["*"];
     return {
       principal: {
-        authType: "api-key",
-        role,
-        clearance: normalizeClearance(keyRow.clearanceLevel),
-        allowedDomains:
-          Array.isArray(keyRow.allowedDomains) && keyRow.allowedDomains.length > 0
-            ? keyRow.allowedDomains
-            : ["*"],
-        canWrite: keyRow.canWrite,
-        canReadAgentMemory: keyRow.canReadAgentMemory,
-        keyName: keyRow.name,
-        keyId: keyRow.id,
+        ...principal,
+        clearance:
+          capped && CLEARANCE_RANK[principal.clearance] < CLEARANCE_RANK[clearance]
+            ? principal.clearance
+            : clearance,
+        allowedDomains: principal.allowedDomains.length ? keyDomains : [],
+        canWrite: !capped && row.canWrite,
+        canReadAgentMemory: !capped && row.canReadAgentMemory,
+        keyName: row.name,
+        keyId: row.id,
       },
     };
   }
-
-  // CEO interactive console — allows optional ACL view simulation via ?asRole= or X-Simulate-Role
-  const simParam = (
-    req.nextUrl.searchParams.get("asRole") ||
-    req.headers.get("x-simulate-role") ||
-    ""
-  )
-    .trim()
-    .toUpperCase();
-
-  if (simParam && VALID_ROLES.has(simParam as PrincipalRole) && simParam !== "CEO") {
-    return {
-      principal: makeRolePrincipal(simParam as PrincipalRole, "role-simulation"),
-    };
+  const requested =
+    req.nextUrl.searchParams.get("asRole") ?? req.headers.get("x-simulate-role") ?? bodyRole;
+  if (requested !== undefined) {
+    const id = requested.trim().toLowerCase();
+    const rights = lookupRights(id.startsWith("exec-") ? id : id.toUpperCase(), "role-simulation");
+    return rights
+      ? { principal: rights.principal }
+      : { principal: denied("role-simulation"), error: "Unknown or retired principal." };
   }
-
   return { principal: makeRolePrincipal("CEO", "ceo-session") };
+}
+
+/** No-access callers do not receive even taxonomy, domain metadata or redaction counts. */
+export async function resolveEnterprisePrincipal(req: NextRequest, bodyRole?: string) {
+  const auth = await resolvePrincipal(req, bodyRole);
+  if (auth.error) return { ...auth, status: 401 };
+  if (!auth.principal.allowedDomains.length)
+    return { ...auth, error: "No enterprise access in this scope.", status: 403 };
+  return { ...auth, status: 200 };
 }
 
 export function canPrincipalRead(
@@ -197,7 +224,8 @@ export function canPrincipalRead(
   }
 
   // Clearance level check
-  const itemRank = CLEARANCE_RANK[normalizeClearance(item.classificationLevel)];
+  if (!Object.hasOwn(CLEARANCE_RANK, item.classificationLevel)) return false;
+  const itemRank = CLEARANCE_RANK[item.classificationLevel as ClearanceLevel];
   const callerRank = CLEARANCE_RANK[principal.clearance];
   if (callerRank < itemRank) return false;
 
@@ -759,7 +787,7 @@ export async function createGraphEntity(params: {
   const acl =
     Array.isArray(params.aclReadRoles) && params.aclReadRoles.length > 0
       ? Array.from(new Set(["CEO", ...params.aclReadRoles]))
-      : ["CEO", "CTO", "CFO", "COO"];
+      : ["CEO"];
   const [created] = await db
     .insert(ekEntities)
     .values({
@@ -804,7 +832,7 @@ export async function createGraphRelationship(params: {
   const acl =
     Array.isArray(params.aclReadRoles) && params.aclReadRoles.length > 0
       ? Array.from(new Set(["CEO", ...params.aclReadRoles]))
-      : ["CEO", "CTO", "CFO", "COO"];
+      : ["CEO"];
 
   const [created] = await db
     .insert(ekRelationships)
@@ -1073,7 +1101,7 @@ export async function retrieveEnterpriseKnowledge(params: {
 
     const live = await tryLiveOpencodeCompletion({
       config,
-      modelDisplayId: config.ctoModel,
+      modelDisplayId: getMember(params.principal.role)?.model ?? config.ctoModel,
       maxTokens: 420,
       systemPrompt: `You are the Aether Enterprise Knowledge Retrieval Engine answering for principal role "${params.principal.role}" (clearance: ${params.principal.clearance}).
 Answer strictly using the authorized enterprise passages and cross-domain knowledge graph triples below. Cite [Doc #ID] inline and highlight cross-domain dependencies. Keep to 3-5 crisp executive sentences.`,
@@ -1457,14 +1485,16 @@ export async function createEnterpriseApiKey(params: {
     .update(plainTextKey)
     .digest("hex");
 
-  const role = VALID_ROLES.has(params.assignedRole)
-    ? params.assignedRole
-    : "EXTERNAL_AGENT";
-  const clearance = normalizeClearance(
-    params.clearanceLevel || DEFAULT_ROLE_CLEARANCE[role]
-  );
+  const rights = lookupRights(params.assignedRole,'api-key');
+  if (!rights) throw new RosterError('Choose an active principal.');
+  const {capped:restricted,principal:bound} = rights;
+  const role = bound.role;
+  const clearance = normalizeClearance(params.clearanceLevel || bound.clearance);
+  if (restricted && (params.canWrite || params.canReadAgentMemory || CLEARANCE_RANK[clearance] > CLEARANCE_RANK[bound.clearance])) {
+    throw new RosterError("Key grants exceed the selected executive's permission preset.");
+  }
   const domains =
-    Array.isArray(params.allowedDomains) && params.allowedDomains.length > 0
+    Array.isArray(params.allowedDomains) && (restricted || params.allowedDomains.length > 0)
       ? params.allowedDomains
       : ["*"];
 

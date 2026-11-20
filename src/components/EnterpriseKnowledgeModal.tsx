@@ -28,6 +28,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import {principalOptions, type Executive} from "@/lib/roster";
 import MermaidMindmapView from "./MermaidMindmapView";
 import KnowledgeGraphView from "./KnowledgeGraphView";
 import type {
@@ -142,14 +143,6 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const ALL_ROLES: PrincipalRole[] = [
-  "CEO",
-  "CFO",
-  "CTO",
-  "COO",
-  "EXTERNAL_AGENT",
-];
-
 const CLEARANCE_STYLES: Record<string, string> = {
   public: "bg-emerald-50 text-emerald-700 border-emerald-200",
   internal: "bg-sky-50 text-sky-700 border-sky-200",
@@ -164,16 +157,18 @@ const SAMPLE_QUERIES = [
 ];
 
 export default function EnterpriseKnowledgeModal({
-  open,
+  open, roster,
   initialTab = "mindmap",
   onClose,
   onStatsChanged,
 }: {
-  open: boolean;
+  open: boolean; roster: Executive[];
   initialTab?: KnowledgeOsTab;
   onClose: () => void;
   onStatsChanged: () => void;
 }) {
+  const options = principalOptions(roster);
+  const aclOptions = [...options, {value:'*', label:'All permitted readers (*)'}];
   const [tab, setTab] = useState<KnowledgeOsTab>(initialTab);
   const [refreshToken, setRefreshToken] = useState(0);
 
@@ -198,12 +193,7 @@ export default function EnterpriseKnowledgeModal({
   const [ingDocType, setIngDocType] = useState("policy");
   const [ingDomain, setIngDomain] = useState("auto");
   const [ingClearance, setIngClearance] = useState<ClearanceLevel>("internal");
-  const [ingRoles, setIngRoles] = useState<string[]>([
-    "CEO",
-    "CTO",
-    "CFO",
-    "COO",
-  ]);
+  const [ingRoles, setIngRoles] = useState<string[]>(["CEO"]);
   const [ingesting, setIngesting] = useState(false);
   const [ingestFeedback, setIngestFeedback] = useState<string | null>(null);
 
@@ -245,6 +235,9 @@ export default function EnterpriseKnowledgeModal({
   const [newKeyDomains, setNewKeyDomains] = useState<string[]>(["*"]);
   const [newKeyWrite, setNewKeyWrite] = useState(false);
   const [newKeyAgentMem, setNewKeyAgentMem] = useState(false);
+  const keyMember = roster.find(e=>e.id===newKeyRole);
+  const capped = !!keyMember && keyMember.preset !== 'legacy';
+  const [keyError, setKeyError] = useState('');
   const [mintedKey, setMintedKey] = useState<string | null>(null);
   const [toolSpec, setToolSpec] = useState<Record<string, unknown> | null>(null);
   const [specTab, setSpecTab] = useState<"curl" | "openai" | "anthropic" | "openapi">(
@@ -254,9 +247,7 @@ export default function EnterpriseKnowledgeModal({
   const [liveTestOutput, setLiveTestOutput] = useState<string | null>(null);
   const [liveTesting, setLiveTesting] = useState(false);
 
-  useEffect(() => {
-    if (open) setTab(initialTab);
-  }, [open, initialTab]);
+
 
   const bumpMutation = useCallback(() => {
     setRefreshToken((t) => t + 1);
@@ -313,12 +304,12 @@ export default function EnterpriseKnowledgeModal({
 
   useEffect(() => {
     if (!open) return;
-    loadDocuments();
-    loadTaxonomy();
+    const timer = setTimeout(() => {void loadDocuments(); void loadTaxonomy();}, 0);
+    return () => clearTimeout(timer);
   }, [open, loadDocuments, loadTaxonomy]);
 
   useEffect(() => {
-    if (open && tab === "api") loadApiResources();
+    if (open && tab === "api") {const timer = setTimeout(loadApiResources, 0); return () => clearTimeout(timer);}
   }, [open, tab, loadApiResources]);
 
   if (!open) return null;
@@ -504,7 +495,7 @@ export default function EnterpriseKnowledgeModal({
           }),
         }
       );
-      if (res.ok) setRetResult(await res.json());
+      setRetResult(res.ok ? await res.json() : null);
     } finally {
       setRetLoading(false);
     }
@@ -513,6 +504,7 @@ export default function EnterpriseKnowledgeModal({
   const handleMintKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newKeyName.trim()) return;
+    setKeyError('');
     const res = await fetch("/api/v1/enterprise/api-keys", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -526,6 +518,7 @@ export default function EnterpriseKnowledgeModal({
       }),
     });
     const data = await res.json();
+    if (!res.ok) setKeyError(data.error || "Could not create key.");
     if (res.ok && data.plainTextKey) {
       setMintedKey(data.plainTextKey);
       setNewKeyName("");
@@ -735,13 +728,13 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
           {/* 1. MERMAID MINDMAP VISUALIZER */}
           {tab === "mindmap" && (
             <MermaidMindmapView
-              refreshToken={refreshToken}
+              roster={roster} refreshToken={refreshToken}
               onJumpTab={(next) => setTab(next)}
             />
           )}
 
           {/* 2. DOMAIN-TAGGED KNOWLEDGE GRAPH */}
-          {tab === "graph" && <KnowledgeGraphView onMutated={bumpMutation} />}
+          {tab === "graph" && <KnowledgeGraphView roster={roster} onMutated={bumpMutation} />}
 
           {/* 3. DOMAIN KBs, AUTO-CLASSIFICATION & HUMAN REVIEW QUEUE */}
           {tab === "documents" && (
@@ -916,7 +909,7 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                         <span className="font-semibold text-slate-500">
                           ACL Read:
                         </span>
-                        {ALL_ROLES.map((r) => {
+                        {aclOptions.map(({value:r,label}) => {
                           const checked = ingRoles.includes(r);
                           return (
                             <button
@@ -929,7 +922,7 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                                   : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                               }`}
                             >
-                              {r}
+                              {label}
                             </button>
                           );
                         })}
@@ -1183,7 +1176,7 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                         ACL Permitted Reader Roles
                       </label>
                       <div className="flex flex-wrap gap-1.5">
-                        {ALL_ROLES.map((r) => (
+                        {aclOptions.map(({value:r,label}) => (
                           <button
                             key={r}
                             type="button"
@@ -1194,7 +1187,7 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                                 : "bg-slate-100 text-slate-500"
                             }`}
                           >
-                            {r}
+                            {label}
                           </button>
                         ))}
                       </div>
@@ -1536,9 +1529,9 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                         }
                         className="bg-transparent text-xs font-bold text-slate-900 focus:outline-none"
                       >
-                        {ALL_ROLES.map((r) => (
+                        {options.map(({value:r,label}) => (
                           <option key={r} value={r}>
-                            {r}
+                            {label}
                           </option>
                         ))}
                       </select>
@@ -1759,32 +1752,36 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
 
                   <div className="grid grid-cols-2 gap-2">
                     <select
-                      value={newKeyRole}
-                      onChange={(e) =>
-                        setNewKeyRole(e.target.value as PrincipalRole)
-                      }
+                      aria-label="Key identity" value={newKeyRole}
+                      onChange={ev => {
+                        const next = ev.target.value as PrincipalRole;
+                        setNewKeyRole(next); setKeyError('');
+                        const member = roster.find(e => e.id === next);
+                        if (member && member.preset !== 'legacy') {
+                          setNewKeyClearance(member.preset === 'none' ? 'public' : member.preset);
+                          setNewKeyWrite(false); setNewKeyAgentMem(false);
+                        }
+                      }}
                       className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold"
                     >
-                      {ALL_ROLES.map((r) => (
+                      {options.map(({value:r,label}) => (
                         <option key={r} value={r}>
-                          Role: {r}
+                          Role: {label}
                         </option>
                       ))}
                     </select>
 
                     <select
-                      value={newKeyClearance}
+                      aria-label="Key clearance" value={newKeyClearance}
                       onChange={(e) =>
                         setNewKeyClearance(e.target.value as ClearanceLevel)
                       }
                       className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold"
                     >
                       <option value="public">Clearance: public</option>
-                      <option value="internal">Clearance: internal</option>
-                      <option value="confidential">Clearance: confidential</option>
-                      <option value="board_restricted">
-                        Clearance: board_restricted
-                      </option>
+                      <option disabled={capped && keyMember.preset === 'none'} value="internal">Clearance: internal</option>
+                      <option disabled={capped && keyMember.preset !== 'confidential'} value="confidential">Clearance: confidential</option>
+                      <option disabled={capped} value="board_restricted">Clearance: board_restricted</option>
                     </select>
                   </div>
 
@@ -1815,7 +1812,7 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                               const next = active
                                 ? base.filter((x) => x !== d.key)
                                 : [...base, d.key];
-                              setNewKeyDomains(next.length ? next : ["*"]);
+                              setNewKeyDomains(capped || next.length ? next : ["*"]);
                             }}
                             className={`rounded-md px-2 py-0.5 text-[10.5px] font-semibold ${
                               active
@@ -1834,7 +1831,7 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                     <label className="inline-flex items-center gap-2 text-slate-700">
                       <input
                         type="checkbox"
-                        checked={newKeyWrite}
+                        disabled={capped} checked={newKeyWrite}
                         onChange={(e) => setNewKeyWrite(e.target.checked)}
                         className="accent-blue-600"
                       />
@@ -1843,7 +1840,7 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                     <label className="inline-flex items-center gap-2 text-slate-700">
                       <input
                         type="checkbox"
-                        checked={newKeyAgentMem}
+                        disabled={capped} checked={newKeyAgentMem}
                         onChange={(e) => setNewKeyAgentMem(e.target.checked)}
                         className="accent-indigo-600"
                       />
@@ -1859,6 +1856,7 @@ curl "${originUrl}/api/v1/agent-memory" -H "Authorization: Bearer ${sampleBearer
                     Generate Bearer API Key
                   </button>
 
+                  {keyError && <p role="alert" className="text-red-800">{keyError}</p>}
                   {mintedKey && (
                     <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs">
                       <div className="flex items-center justify-between font-bold text-emerald-900">

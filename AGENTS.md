@@ -1,6 +1,6 @@
 # Working on Coworkerz
 
-Coworkerz (branded **Aether** in the UI) is a Next.js App Router application, not a standalone game. The human is the CEO. Three software executives deliberate one turn at a time; a Three.js scene acts out the server's plan. This file is for **agents editing the repository**, not a system prompt for the executives.
+Coworkerz (branded **Aether** in the UI) is a Next.js App Router application, not a standalone game. The human is the CEO. A persisted roster of software executives deliberates one turn at a time; a Three.js scene acts out the server's plan. This file is for **agents editing the repository**, not a system prompt for the executives.
 
 ## Read only the slice you need
 
@@ -11,8 +11,8 @@ Start at the symbol, not the top of every file. If this map and the checkout dis
 | Storage, migrations, demo data | `src/db/schema.ts`, `src/db/index.ts`, `drizzle.config.ts` | `drizzle/` migration history, `scripts/seed.ts`, `scripts/sqlite.test.ts` |
 | CEO controls, transcript, auto/manual turns | `src/components/ExecutiveBoardroomApp.tsx` → `executeSingleWalkTalkStep` | `src/app/api/sessions/route.ts`, `src/app/api/ceo-message/route.ts`, `src/app/api/deliberate/step/route.ts` |
 | Avatars, cameras, lighting, VFX | `src/components/VirtualOfficeCanvas.tsx` → `buildExecutiveAvatar`, `animate` | `src/lib/executives.ts` → `EXECUTIVES`, `ROOM_ZONES`; [art budgets](docs/art-budgets.md) |
-| Who speaks vs. what they say | `src/lib/opencode.ts` → `planDeliberationStep` vs. `generateExecutiveDeliberationTurn` | `src/app/api/deliberate/step/route.ts`; [turn evaluation](docs/turn-evaluation.md) |
-| Bot names, jobs and skill prompts | `src/components/CustomizeBotsDialog.tsx`, `src/app/api/executive-profiles/`, `src/lib/executive-profile-store.ts` | `getTurnIdentity(plan.speaker)` → `generateExecutiveDeliberationTurn`; `scripts/browser/customize-bots.spec.ts` |
+| Who speaks vs. what they say | `src/lib/turn-planner.ts` → `planDeliberationStep`; `src/lib/opencode.ts` → `generateExecutiveDeliberationTurn` | `src/app/api/deliberate/step/route.ts`; [turn evaluation](docs/turn-evaluation.md) |
+| Roster, stable IDs and profile settings | `src/components/CustomizeBotsDialog.tsx`, `src/app/api/executive-profiles/`, `src/lib/executive-profile-store.ts` | `requireActive(plan.speaker)` → `generateExecutiveDeliberationTurn`; [roster contract](docs/executive-roster.md); `scripts/browser/dynamic-roster.spec.ts` |
 | Model selection, API settings | `src/components/OpencodeConfigModal.tsx`, `src/app/api/opencode-config/route.ts` | `getActiveOpencodeConfig` in `src/lib/opencode-config.ts`; `tryLiveOpencodeCompletion` in `src/lib/opencode.ts` |
 | Governed documents, retrieval, graph | `src/lib/enterprise-knowledge.ts`, `src/lib/enterprise-taxonomy.ts` | `src/app/api/v1/enterprise/`, `src/components/EnterpriseKnowledgeModal.tsx` |
 | Persona, episodic recall, journals | `src/lib/memory.ts` → `persistMemoriesFor`, `runMemorySync` | `src/app/api/memory/`, `src/app/api/v1/agent-memory/route.ts`, `src/components/MemoryPanel.tsx` |

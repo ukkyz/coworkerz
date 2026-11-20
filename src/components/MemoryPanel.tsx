@@ -14,8 +14,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { EXECUTIVES, ExecutiveRole } from "@/lib/executives";
-import type { ExecutiveProfiles } from "@/lib/executive-profiles";
+import {accentOf, type Executive} from '@/lib/roster';
 import type { CeoPersonaProfile } from "@/db/schema";
 
 interface MemoryPayload {
@@ -46,7 +45,7 @@ interface MemoryPayload {
   memoryDir: string;
 }
 
-const ROLES: ExecutiveRole[] = ["CTO", "CFO", "COO"];
+
 
 function timeAgo(iso: string): string {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -56,7 +55,7 @@ function timeAgo(iso: string): string {
   return `${Math.round(s / 86400)}d ago`;
 }
 
-export default function MemoryPanel({ refreshKey, profiles }: { refreshKey: number; profiles: ExecutiveProfiles }) {
+export default function MemoryPanel({ refreshKey, roster }: { refreshKey: number; roster: Executive[] }) {
   const [data, setData] = useState<MemoryPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [rebuilding, setRebuilding] = useState(false);
@@ -238,14 +237,14 @@ export default function MemoryPanel({ refreshKey, profiles }: { refreshKey: numb
       {p && (
         <div className="space-y-2">
           <div className="px-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">What your C-suite has learned about you</div>
-          {ROLES.map((r) => (
+          {roster.map(({id:r, ...e}) => (
             <div key={r} className="rounded-2xl border border-slate-200 bg-white p-3">
               <div className="mb-1 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: EXECUTIVES[r].accentHex }}>
-                    {r}
+                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: accentOf(r) }}>
+                    {e.roleName}{e.retiredAfter === null ? "" : " (archived)"}
                   </span>
-                  <span className="text-[11px] font-semibold wrap-anywhere text-slate-800">{profiles[r].displayName}</span>
+                  <span className="text-[11px] font-semibold wrap-anywhere text-slate-800">{e.displayName}</span>
                 </div>
                 <button
                   type="button"
@@ -256,7 +255,7 @@ export default function MemoryPanel({ refreshKey, profiles }: { refreshKey: numb
                 </button>
               </div>
               <ul className="space-y-0.5">
-                {p.executiveObservations[r].slice(0, 3).map((o, i) => (
+                {(p.executiveObservations[r] || []).slice(0, 3).map((o, i) => (
                   <li key={i} className="text-[11px] leading-relaxed text-slate-600">• {o}</li>
                 ))}
               </ul>
