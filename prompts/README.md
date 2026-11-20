@@ -2,7 +2,10 @@
 
 **Pick the recipient first.** A *coding agent* needs a change to make, a read set and an observable pass condition. A *boardroom executive* needs a CEO decision, facts, unknowns and a time horizon. Do not put development instructions into the CEO persona, journals or enterprise KB.
 
-**Ready-to-paste feature prompt:** [Next.js and bot customization · v1](features/nextjs-bot-customization.v1.md) — verify the framework first, then let the CEO edit each executive's name, job and AI skill prompt. Give the whole file to a coding agent with the checkout.
+**Ready-to-paste feature prompts:** Give the relevant file to a coding agent with the checkout.
+
+- [Custom executive roles and a live roster · v1](features/dynamic-executive-roster.v1.md) — add or replace independently addressable executives, with suggested or custom role names, separate histories, and CEO-selected permission presets.
+- [Next.js and bot customization · v1](features/nextjs-bot-customization.v1.md) — the earlier brief for editing a bot's personal display name, job and skill prompt in the original three slots. Use the roster brief above to change the role itself.
 
 ## Coding agent · v1 contract, versioned task cards
 
@@ -48,6 +51,7 @@ To explore the same pilot outside the scored run, choose a target in the compose
 
 | Version | Change | Validation scope |
 | --- | --- | --- |
+| dynamic-executive-roster v1 | Records the confirmed roster, replacement, relevance routing, two-person staging and permission-preset requirements. Keeps unresolved policy choices explicit. | Prompt and repo references checked; implementation and acceptance runs are future work. |
 | nextjs-bot-customization v1 | Standalone implementation prompt with a conditional Vite migration and independent CTO/CFO/COO profile edits | Repo paths checked; UI, persistence and model checks specified for the implementing agent, not claimed as results |
 | v2 cards | Boardroom now targets file-backed SQLite; new storage card covers migrations, seed receipts and persistence tests. The v1 boardroom card describes the archived PostgreSQL implementation. Contract and turn fixture unchanged. | Offline assembly and SQLite integration tests |
 | v1 | Initial implementation contract and boardroom, scene, turn and knowledge cards; `pilot-v1` four-turn cycle plus addressed follow-up | Offline assembly tests; synthetic reference expectations. No production-model or device-quality claim. |
